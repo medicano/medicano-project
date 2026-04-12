@@ -1,16 +1,26 @@
-## Hi there 👋
+# Medicano
 
-<!--
-**Medicano/medicano** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+React + TypeScript (Vite) em `front/`. API Express + TypeScript em `backend/` (um arquivo só).
 
-Here are some ideas to get you started:
+## Instalar
 
-- 🔭 I’m currently working on ...
-- 🌱 I’m currently learning ...
-- 👯 I’m looking to collaborate on ...
-- 🤔 I’m looking for help with ...
-- 💬 Ask me about ...
-- 📫 How to reach me: ...
-- 😄 Pronouns: ...
-- ⚡ Fun fact: ...
--->
+```bash
+npm install
+```
+
+## Desenvolver
+
+API na porta `3001`, site na `5173`:
+
+```bash
+npm run dev
+```
+
+## Build
+
+```bash
+npm run build
+npm start
+```
+
+Copie `.env.example` para `.env` na raiz para ajustar `PORT` e `CLIENT_ORIGIN`.

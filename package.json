@@ -1,0 +1,34 @@
+{
+  "name": "medicano",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n backend,front -c blue,green \"npm run dev:backend\" \"npm run dev:front\"",
+    "dev:backend": "tsx watch backend/index.ts",
+    "dev:front": "vite",
+    "build": "vite build && tsc -p backend/tsconfig.json",
+    "start": "node backend/dist/index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.14.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.2",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "tailwindcss": "^4.2.2",
+    "tsx": "^4.19.2",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.3"
+  }
+}
