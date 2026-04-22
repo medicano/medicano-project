@@ -1,0 +1,66 @@
+plan:
+  description: >
+    Analyze this request and create a detailed technical plan:
+
+    REQUEST: {request}
+
+    PROJECT CONTEXT:
+    - Stack: NestJS + TypeScript + MongoDB (Mongoose) + React
+    - Monorepo with apps/api and apps/web
+    - JWT authentication with Redis (tokens revocable on logout)
+    - NestJS modular pattern (controllers, services, DTOs)
+    - Business rules: no time slot overlaps, availability slots,
+      appointment status (pending/confirmed/cancelled)
+
+    Your plan must include:
+    1. Which files to create or modify
+    2. Required TypeScript data structures and interfaces
+    3. API endpoints (method, route, input and output DTOs)
+    4. Business rules that need to be validated
+    5. Dependencies between the items above
+  expected_output: >
+    Structured technical plan in Markdown with clear sections for
+    files, types, endpoints and business rules.
+  agent: architect
+
+implement:
+  description: >
+    Based on the architect's plan, implement the complete code.
+    Write each file mentioned in the plan with no TODOs or
+    placeholders. The code must compile without TypeScript errors.
+  expected_output: >
+    Complete TypeScript code for each file, formatted as code blocks
+    with the file path as the title.
+  agent: developer
+  context:
+    - plan
+
+document:
+  description: >
+    Document the implemented code:
+    1. Add JSDoc to all public methods
+    2. Write @ApiProperty annotations on DTOs for Swagger
+    3. Write a documentation block summarizing what was implemented
+       and how to use the new endpoints
+  expected_output: >
+    Code with JSDoc added and a Markdown block explaining the endpoints
+    and how to test them in Insomnia.
+  agent: documenter
+  context:
+    - implement
+
+review:
+  description: >
+    Review the code and report issues. Check specifically:
+    - Security: inputs validated with class-validator? Guards applied?
+    - Business rules: time conflict check? Correct status handling?
+    - TypeScript: unnecessary `any`? Correct interfaces?
+    - NestJS: correct dependency injection? Module exporting the service?
+  expected_output: >
+    List of issues found with severity level (critical/medium/low)
+    and a suggested fix for each. If no issues are found, confirm
+    the code is approved.
+  agent: reviewer
+  context:
+    - implement
+    - document
