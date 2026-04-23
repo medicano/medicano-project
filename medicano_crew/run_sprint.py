@@ -21,9 +21,17 @@ from datetime import datetime
 from pathlib import Path
 
 CREW_DIR = Path(__file__).parent
+PROJECT_ROOT = CREW_DIR.parent
 DEFAULT_PROMPTS_FILE = CREW_DIR / "docs" / "specs" / "sprint-01-prompts.json"
 STATE_DIR = CREW_DIR / "output" / "phase_state"
 LOGS_DIR = CREW_DIR / "output" / "phase_logs"
+
+# Reference documents that must exist before running any sprint.
+# Paths are relative to PROJECT_ROOT.
+_AIDER_READ_FILES = [
+    "medicano_crew/docs/CONVENTIONS.md",
+    "medicano_crew/docs/specs/feature-registry.md",
+]
 
 
 def load_prompts(path: Path) -> dict:
@@ -42,6 +50,15 @@ def mark_done(sprint: str, prompt_id: int, run_id: str):
 
 def is_done(sprint: str, prompt_id: int) -> bool:
     return state_file(sprint, prompt_id).exists()
+
+
+def _check_read_files() -> list[str]:
+    """Warn about any missing reference files that Aider expects to read."""
+    missing = []
+    for rel_path in _AIDER_READ_FILES:
+        if not (PROJECT_ROOT / rel_path).exists():
+            missing.append(rel_path)
+    return missing
 
 
 def run_prompt(sprint: str, prompt: dict, dry_run: bool) -> bool:
@@ -125,6 +142,14 @@ def main():
         print(f"[ERROR] Prompts file not found: {prompts_path}", file=sys.stderr)
         sys.exit(1)
 
+    # Pre-flight: warn about missing reference files before starting.
+    missing_refs = _check_read_files()
+    if missing_refs:
+        print("\n⚠️  WARNING: The following Aider reference files are missing:")
+        for f in missing_refs:
+            print(f"     - {f}")
+        print("   Create them before running sprints to avoid code duplication.\n")
+
     data = load_prompts(prompts_path)
     sprint = data["sprint"]
     prompts = data["prompts"]
@@ -176,6 +201,10 @@ def main():
         if skipped:
             print(f"  Skipped : {skipped}")
         print("  Status  : ALL OK")
+        if not args.dry_run:
+            print()
+            print("  ⚠️  REMINDER: Update medicano_crew/docs/specs/feature-registry.md")
+            print("               with every new file and method added in this sprint.")
     print(f"{'#' * 70}\n")
 
     sys.exit(1 if failed else 0)

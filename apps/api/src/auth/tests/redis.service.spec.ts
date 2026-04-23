@@ -30,7 +30,8 @@ describe('RedisService', () => {
     }).compile();
 
     redisService = module.get<RedisService>(RedisService);
-    await redisService.onModuleInit();
+    // RedisService creates the ioredis client in the constructor.
+    // No onModuleInit() call needed.
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -39,7 +40,11 @@ describe('RedisService', () => {
     it('should save a token with correct key and TTL', async () => {
       await redisService.saveToken('userId1', 'jwt.token', 3600);
 
-      expect(mockRedisClient.setex).toHaveBeenCalledWith('auth:token:userId1', 3600, 'jwt.token');
+      expect(mockRedisClient.setex).toHaveBeenCalledWith(
+        'auth:token:userId1',
+        3600,
+        'jwt.token',
+      );
     });
 
     it('should overwrite existing token for same userId', async () => {
@@ -47,7 +52,11 @@ describe('RedisService', () => {
       await redisService.saveToken('userId1', 'second.token', 3600);
 
       expect(mockRedisClient.setex).toHaveBeenCalledTimes(2);
-      expect(mockRedisClient.setex).toHaveBeenLastCalledWith('auth:token:userId1', 3600, 'second.token');
+      expect(mockRedisClient.setex).toHaveBeenLastCalledWith(
+        'auth:token:userId1',
+        3600,
+        'second.token',
+      );
     });
   });
 
@@ -67,6 +76,32 @@ describe('RedisService', () => {
       const result = await redisService.getToken('nonexistent');
 
       expect(result).toBeNull();
+    });
+  });
+
+  describe('validateToken', () => {
+    it('should return true when stored token matches', async () => {
+      mockRedisClient.get.mockResolvedValue('jwt.token');
+
+      const result = await redisService.validateToken('userId1', 'jwt.token');
+
+      expect(result).toBe(true);
+    });
+
+    it('should return false when stored token does not match', async () => {
+      mockRedisClient.get.mockResolvedValue('jwt.token');
+
+      const result = await redisService.validateToken('userId1', 'wrong.token');
+
+      expect(result).toBe(false);
+    });
+
+    it('should return false when no token is stored', async () => {
+      mockRedisClient.get.mockResolvedValue(null);
+
+      const result = await redisService.validateToken('userId1', 'jwt.token');
+
+      expect(result).toBe(false);
     });
   });
 
