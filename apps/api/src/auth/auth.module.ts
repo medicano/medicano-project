@@ -18,7 +18,8 @@ import { UserModule } from '../users/user.module';
       useFactory: (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET'),
         signOptions: {
-          expiresIn: configService.get<string>('JWT_ACCESS_TTL', '15m'),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          expiresIn: configService.get<string>('JWT_ACCESS_TTL', '15m') as any,
         },
       }),
     }),

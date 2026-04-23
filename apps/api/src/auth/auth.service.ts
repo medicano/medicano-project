@@ -77,11 +77,11 @@ export class AuthService {
     const refreshTtl = this.configService.get<string>('JWT_REFRESH_TTL', '7d');
 
     const accessToken = this.jwtService.sign(payload, {
-      expiresIn: accessTtl,
+      expiresIn: accessTtl as any,
     });
 
     const refreshToken = this.jwtService.sign(payload, {
-      expiresIn: refreshTtl,
+      expiresIn: refreshTtl as any,
     });
 
     const refreshTtlSeconds = this.parseTtlToSeconds(refreshTtl);
