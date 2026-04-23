@@ -1,0 +1,70 @@
+{
+  "sprint": "sprint-01-auth",
+  "description": "Authentication Foundation for Medicano platform",
+  "context": {
+    "stack": "NestJS + TypeScript + MongoDB (Mongoose) + Redis (ioredis)",
+    "monorepo": "apps/api (NestJS), apps/web (React), packages/types (shared)",
+    "roles": ["patient", "clinic", "professional", "attendant"],
+    "auth_rules": {
+      "jwt_expiry": "7 days",
+      "redis_required": "token must also exist in Redis to be valid",
+      "password_hash": "bcrypt cost 12"
+    }
+  },
+  "prompts": [
+    {
+      "id": 1,
+      "name": "shared-types",
+      "description": "Shared TypeScript types for the auth domain in packages/types",
+      "request": "Create shared TypeScript types for the auth domain in packages/types. Create packages/types/src/auth.ts with: UserRole enum (patient | clinic | professional | attendant); IUser interface (id: string, role: UserRole, email?: string, username?: string, createdAt: Date); IClinic interface (id: string, name: string, subscriptionStatus: string); IProfessional interface (id: string, specialty: string, userId: string); IClinicProfessional interface (clinicId: string, professionalId: string); IAuthTokens interface (accessToken: string); ILoginStandardDto interface (email: string, password: string); ILoginAttendantDto interface (clinicId: string, username: string, password: string). Export everything from packages/types/src/index.ts. Create packages/types/package.json with name '@medicano/types' and main pointing to src/index.ts."
+    },
+    {
+      "id": 2,
+      "name": "user-schema",
+      "description": "Mongoose User schema with role constraints and indexes",
+      "request": "Create the Mongoose User schema in apps/api/src/users/schemas/user.schema.ts. Fields: _id (auto ObjectId), role (String enum: patient|clinic|professional|attendant, required, immutable), email (String, optional, sparse), username (String, optional, sparse), clinicId (ObjectId ref Clinic, optional — only for attendants), passwordHash (String, required, select: false to never expose it), createdAt (Date, default now). Add compound sparse indexes: unique(role, email) for non-attendants, unique(clinicId, username) for attendants. Use @Schema({ timestamps: false }), @Prop decorators from @nestjs/mongoose. Export User, UserDocument, UserSchema."
+    },
+    {
+      "id": 3,
+      "name": "clinic-professional-schemas",
+      "description": "Mongoose schemas for Clinic, Professional and ClinicProfessional",
+      "request": "Create Mongoose schemas for the remaining core entities. Create apps/api/src/clinics/schemas/clinic.schema.ts: fields id, name (String required), subscriptionStatus (String enum: active|inactive|trial, default trial). Create apps/api/src/professionals/schemas/professional.schema.ts: fields id, specialty (String required), userId (ObjectId ref User, required unique). Create apps/api/src/professionals/schemas/clinic-professional.schema.ts: fields clinicId (ObjectId ref Clinic required), professionalId (ObjectId ref Professional required), unique compound index on (clinicId, professionalId). Export all schemas and document types."
+    },
+    {
+      "id": 4,
+      "name": "users-module",
+      "description": "UsersModule with repository, service and bcrypt password hashing",
+      "request": "Create UsersModule in apps/api/src/users/. Implement UsersRepository (apps/api/src/users/users.repository.ts) with methods: create(data), findByEmailAndRole(email, role), findByClinicIdAndUsername(clinicId, username), findById(id). Implement UsersService (apps/api/src/users/users.service.ts) with: hashPassword(plain: string): Promise<string> using bcrypt with cost factor 12, comparePassword(plain, hash): Promise<boolean>, createUser(dto) that enforces constraints (attendant cannot have email; non-attendants cannot have username; role is set at creation only), getById(id). Create UsersModule (apps/api/src/users/users.module.ts) importing MongooseModule for UserSchema, exporting UsersService and UsersRepository. Never return passwordHash in any response — select it explicitly only when needed for comparison."
+    },
+    {
+      "id": 5,
+      "name": "signup-and-login",
+      "description": "Signup and login endpoints with DTOs and auto-login after signup",
+      "request": "Create AuthModule in apps/api/src/auth/ with signup and login endpoints. Create DTOs: SignupDto (role: UserRole, email?: string, username?: string, clinicId?: string, password: string — validate with class-validator; attendant requires username+clinicId, others require email); LoginStandardDto (email: string, password: string); LoginAttendantDto (clinicId: string, username: string, password: string). Create AuthService with: signup(dto): generates user, hashes password, stores in DB, issues JWT token (auto-login, returns IAuthTokens); loginStandard(dto): validates email+role+password, issues JWT; loginAttendant(dto): validates clinicId+username+password, issues JWT. Create AuthController with POST /auth/signup and POST /auth/login. JWT secret and expiry (7d) come from ConfigService. Register JwtModule with async config."
+    },
+    {
+      "id": 6,
+      "name": "redis-token-service",
+      "description": "Redis service for revocable JWT session management",
+      "request": "Create RedisService in apps/api/src/auth/redis.service.ts using ioredis. Implement: saveToken(userId: string, token: string, ttlSeconds: number): Promise<void> — stores token in Redis at key auth:token:{userId} with TTL; getToken(userId: string): Promise<string | null> — retrieves token; validateToken(userId: string, token: string): Promise<boolean> — returns true only if stored token matches exactly; removeToken(userId: string): Promise<void> — deletes the key (used on logout). Use REDIS_URL from ConfigService (falls back to redis://localhost:6379). Register RedisService as a provider in AuthModule and export it."
+    },
+    {
+      "id": 7,
+      "name": "jwt-strategy-and-guards",
+      "description": "JWT strategy with Redis dual-validation, guards and decorators",
+      "request": "Create JWT infrastructure in apps/api/src/auth/. Create JwtStrategy (apps/api/src/auth/jwt.strategy.ts) extending PassportStrategy(Strategy): extracts Bearer token from header, validates JWT signature, then calls RedisService.validateToken(userId, rawToken) — if token not in Redis throw UnauthorizedException (session was revoked). JWT payload contains { sub: userId, role: UserRole }. Create JwtAuthGuard (apps/api/src/auth/guards/jwt-auth.guard.ts) extending AuthGuard('jwt'). Create RolesGuard (apps/api/src/auth/guards/roles.guard.ts) that reads @Roles() metadata and checks req.user.role. Create @Roles(...roles: UserRole[]) decorator (apps/api/src/auth/decorators/roles.decorator.ts). Create @CurrentUser() param decorator (apps/api/src/auth/decorators/current-user.decorator.ts) that returns req.user. Export all from AuthModule."
+    },
+    {
+      "id": 8,
+      "name": "logout-endpoint",
+      "description": "Logout endpoint that revokes the JWT by removing it from Redis",
+      "request": "Add logout to apps/api/src/auth/auth.controller.ts and apps/api/src/auth/auth.service.ts. Add AuthService.logout(userId: string): calls RedisService.removeToken(userId) and returns void. Add POST /auth/logout to AuthController protected by JwtAuthGuard: uses @CurrentUser() to get userId, calls authService.logout(userId), returns 204 No Content. After logout the stored JWT is gone from Redis so any subsequent request with the same token will be rejected by JwtStrategy. Also update signup and loginStandard/loginAttendant in AuthService to call RedisService.saveToken after generating the JWT, storing it with TTL matching JWT expiry (7 * 24 * 3600 seconds)."
+    },
+    {
+      "id": 9,
+      "name": "auth-tests",
+      "description": "Unit and integration tests for auth: hashing, login, JWT, Redis, logout",
+      "request": "Create test files for the auth module. Create apps/api/src/auth/tests/auth.service.spec.ts with unit tests: (1) hashPassword generates a bcrypt hash verifiable with compare; (2) signup creates user, stores JWT in Redis and returns accessToken; (3) loginStandard returns token for correct credentials and throws UnauthorizedException for wrong password; (4) loginAttendant returns token using clinicId+username+password. Create apps/api/src/auth/tests/redis.service.spec.ts: saveToken → getToken returns same value; validateToken true for matching, false for wrong token; removeToken → getToken returns null. Create apps/api/src/auth/tests/jwt.strategy.spec.ts: validate rejects when token not in Redis; validate returns user payload when token is in Redis. Create apps/api/src/auth/tests/auth.e2e.spec.ts: full flow — signup, login, access protected route, logout, access protected route returns 401. Use Jest + @nestjs/testing. Mock ioredis with ioredis-mock."
+    }
+  ]
+}

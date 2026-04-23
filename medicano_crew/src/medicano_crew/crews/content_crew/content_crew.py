@@ -14,52 +14,64 @@ class DevCrew:
     agents_config = "config/agents.yaml"
     tasks_config = "config/tasks.yaml"
 
+    # ========================
+    # AGENTS
+    # ========================
+
     @agent
     def architect(self) -> Agent:
         return Agent(
-            config=self.agents_config["architect"],
+            config=self.agents_config["architect"],  # type: ignore[index]
             verbose=True,
         )
 
     @agent
     def developer(self) -> Agent:
         return Agent(
-            config=self.agents_config["developer"],
+            config=self.agents_config["developer"],  # type: ignore[index]
             verbose=True,
         )
 
     @agent
     def documenter(self) -> Agent:
         return Agent(
-            config=self.agents_config["documenter"],
+            config=self.agents_config["documenter"],  # type: ignore[index]
             verbose=True,
         )
 
     @agent
     def reviewer(self) -> Agent:
         return Agent(
-            config=self.agents_config["reviewer"],
+            config=self.agents_config["reviewer"],  # type: ignore[index]
             verbose=True,
         )
 
+    # ========================
+    # TASKS
+    # ========================
+
     @task
     def plan(self) -> Task:
-        return Task(config=self.tasks_config["plan"])
+        return Task(config=self.tasks_config["plan"])  # type: ignore[index]
 
     @task
     def implement(self) -> Task:
-        return Task(config=self.tasks_config["implement"])
+        return Task(config=self.tasks_config["implement"])  # type: ignore[index]
 
     @task
     def document(self) -> Task:
-        return Task(config=self.tasks_config["document"])
+        return Task(config=self.tasks_config["document"])  # type: ignore[index]
 
     @task
     def review(self) -> Task:
         return Task(
-            config=self.tasks_config["review"],
+            config=self.tasks_config["review"],  # type: ignore[index]
             output_file="output/review.md",
         )
+
+    # ========================
+    # CREW
+    # ========================
 
     @crew
     def crew(self) -> Crew:
