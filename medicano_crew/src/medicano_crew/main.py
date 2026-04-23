@@ -1,4 +1,3 @@
-import sys
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -84,12 +83,14 @@ class MedicanoDevFlow(Flow[DevFlowState]):
     def receive_request(self):
         self.state.run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        if len(sys.argv) > 1:
-            self.state.request = " ".join(sys.argv[1:])
-        else:
+        # When called from run_sprint.py, the request is passed via
+        # flow.kickoff(inputs={"request": ...}) which pre-populates
+        # self.state.request. Only fall back to interactive input if empty.
+        if not self.state.request:
             self.state.request = input("\nWhat do you want to implement?\n> ")
 
-        print(f"\n🚀 Starting development: {self.state.request}\n")
+        print(f"\n🚀 Starting development run [{self.state.run_id}]")
+        print(f"   Request: {self.state.request[:120]}{'...' if len(self.state.request) > 120 else ''}\n")
 
     @listen(receive_request)
     def develop(self):
@@ -144,11 +145,13 @@ class MedicanoDevFlow(Flow[DevFlowState]):
     def finish(self):
         print("\n✅ Development complete!")
         print(f"   Prompt : output/prompts/{self.state.run_id}.txt")
-        print(f"   Review : output/review.md")
 
 
 def kickoff():
-    MedicanoDevFlow().kickoff()
+    """Entry point for interactive use (crewai run / python main.py)."""
+    import sys
+    request = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else ""
+    MedicanoDevFlow().kickoff(inputs={"request": request} if request else {})
 
 
 def run():
@@ -157,10 +160,6 @@ def run():
 
 def plot():
     MedicanoDevFlow().plot()
-
-
-def run_with_trigger():
-    kickoff()
 
 
 if __name__ == "__main__":

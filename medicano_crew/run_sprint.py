@@ -75,13 +75,14 @@ def run_prompt(sprint: str, prompt: dict, dry_run: bool) -> bool:
         print(f"\n[DRY RUN] Request:\n{request}\n")
         return True
 
-    # Inline the flow execution to avoid subprocess overhead and keep the
-    # same Python environment / env vars already loaded.
-    sys.argv = ["run_sprint.py", request]
-
     try:
-        from medicano_crew.main import kickoff
-        kickoff()
+        # Import here so the module is loaded fresh each call via a new flow
+        # instance. We pass the request directly to avoid sys.argv manipulation.
+        from medicano_crew.main import MedicanoDevFlow
+
+        flow = MedicanoDevFlow()
+        flow.kickoff(inputs={"request": request})
+
         mark_done(sprint, pid, run_id)
         return True
     except Exception as exc:
