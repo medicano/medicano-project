@@ -1,154 +1,90 @@
-import { Injectable, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Injectable, ConflictException, BadRequestException, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { User, UserDocument } from './schemas/user.schema';
+import { UsersRepository } from './users.repository';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { Role } from './enums/role.enum';
+import { UserResponseDto } from './dto/user-response.dto';
+import { UserRole } from './enums/user-role.enum';
+import { Types } from 'mongoose';
 
 @Injectable()
 export class UsersService {
-  constructor(
-    @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
-  ) {}
+  constructor(private readonly usersRepository: UsersRepository) {}
 
-  async create(createUserDto: CreateUserDto): Promise<UserDocument> {
-    this.validateCreateDto(createUserDto);
-
-    const passwordHash = await bcrypt.hash(createUserDto.password, 10);
-
-    const userData: Partial<User> = {
-      _id: new Types.ObjectId(),
-      role: createUserDto.role,
-      passwordHash,
-      createdAt: new Date(),
-    };
-
-    if (createUserDto.role === Role.ATTENDANT) {
-      if (!createUserDto.clinicId || !createUserDto.username) {
-        throw new BadRequestException('Attendants must have clinicId and username');
-      }
-      userData.clinicId = new Types.ObjectId(createUserDto.clinicId);
-      userData.username = createUserDto.username;
-    } else {
-      if (!createUserDto.email) {
-        throw new BadRequestException('Non-attendant users must have email');
-      }
-      userData.email = createUserDto.email.toLowerCase();
-    }
-
-    try {
-      const createdUser = new this.userModel(userData);
-      return await createdUser.save();
-    } catch (error: any) {
-      if (error.code === 11000) {
-        throw new ConflictException('User with this email or username already exists');
-      }
-      throw error;
-    }
+  async hashPassword(plain: string): Promise<string> {
+    return bcrypt.hash(plain, 12);
   }
 
-  async findById(id: string): Promise<UserDocument> {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Invalid user ID');
-    }
-
-    const user = await this.userModel.findById(id).exec();
-    if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found`);
-    }
-
-    return user;
+  async comparePassword(plain: string, hash: string): Promise<boolean> {
+    return bcrypt.compare(plain, hash);
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<UserDocument> {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Invalid user ID');
-    }
-
-    const user = await this.findById(id);
-
-    const updateData: any = {};
-
-    if (updateUserDto.email !== undefined) {
-      if (user.role === Role.ATTENDANT) {
-        throw new BadRequestException('Attendants cannot have email');
-      }
-      updateData.email = updateUserDto.email.toLowerCase();
-    }
-
-    if (updateUserDto.username !== undefined) {
-      if (user.role !== Role.ATTENDANT) {
-        throw new BadRequestException('Only attendants can have username');
-      }
-      updateData.username = updateUserDto.username;
-    }
-
-    if (updateUserDto.clinicId !== undefined) {
-      if (user.role !== Role.ATTENDANT) {
-        throw new BadRequestException('Only attendants can have clinicId');
-      }
-      updateData.clinicId = new Types.ObjectId(updateUserDto.clinicId);
-    }
-
-    if (updateUserDto.password) {
-      updateData.passwordHash = await bcrypt.hash(updateUserDto.password, 10);
-    }
-
-    try {
-      const updatedUser = await this.userModel
-        .findByIdAndUpdate(id, updateData, { new: true })
-        .exec();
-
-      if (!updatedUser) {
-        throw new NotFoundException(`User with ID ${id} not found`);
-      }
-
-      return updatedUser;
-    } catch (error: any) {
-      if (error.code === 11000) {
-        throw new ConflictException('User with this email or username already exists');
-      }
-      throw error;
-    }
-  }
-
-  async remove(id: string): Promise<{ success: boolean }> {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Invalid user ID');
-    }
-
-    const result = await this.userModel.findByIdAndDelete(id).exec();
-
-    if (!result) {
-      throw new NotFoundException(`User with ID ${id} not found`);
-    }
-
-    return { success: true };
-  }
-
-  private validateCreateDto(dto: CreateUserDto): void {
-    if (dto.role === Role.ATTENDANT) {
-      if (!dto.clinicId) {
-        throw new BadRequestException('Attendants must have clinicId');
-      }
+  async createUser(dto: CreateUserDto): Promise<UserResponseDto> {
+    // Validate role-based field requirements
+    if (dto.role === UserRole.ATTENDANT) {
       if (!dto.username) {
-        throw new BadRequestException('Attendants must have username');
+        throw new BadRequestException('Username is required for attendant role');
       }
       if (dto.email) {
-        throw new BadRequestException('Attendants cannot have email');
+        throw new BadRequestException('Email must not be provided for attendant role');
       }
     } else {
       if (!dto.email) {
-        throw new BadRequestException('Non-attendant users must have email');
-      }
-      if (dto.clinicId) {
-        throw new BadRequestException('Only attendants can have clinicId');
+        throw new BadRequestException('Email is required for non-attendant roles');
       }
       if (dto.username) {
-        throw new BadRequestException('Only attendants can have username');
+        throw new BadRequestException('Username must not be provided for non-attendant roles');
       }
     }
+
+    // Check for duplicate email and role combination
+    if (dto.email) {
+      const existingByEmail = await this.usersRepository.findByEmailAndRole(dto.email, dto.role);
+      if (existingByEmail) {
+        throw new ConflictException('User with this email and role already exists');
+      }
+    }
+
+    // Check for duplicate clinicId and username combination
+    if (dto.username) {
+      const existingByUsername = await this.usersRepository.findByClinicIdAndUsername(
+        dto.clinicId,
+        dto.username,
+      );
+      if (existingByUsername) {
+        throw new ConflictException('User with this username already exists in this clinic');
+      }
+    }
+
+    // Hash password
+    const passwordHash = await this.hashPassword(dto.password);
+
+    // Create user
+    const user = await this.usersRepository.create({
+      clinicId: new Types.ObjectId(dto.clinicId),
+      role: dto.role,
+      email: dto.email?.toLowerCase(),
+      username: dto.username?.toLowerCase(),
+      passwordHash,
+    });
+
+    return this.mapToResponseDto(user);
+  }
+
+  async getById(id: string): Promise<UserResponseDto> {
+    const user = await this.usersRepository.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return this.mapToResponseDto(user);
+  }
+
+  private mapToResponseDto(user: any): UserResponseDto {
+    return {
+      id: user._id.toString(),
+      clinicId: user.clinicId.toString(),
+      role: user.role,
+      email: user.email,
+      username: user.username,
+    };
   }
 }

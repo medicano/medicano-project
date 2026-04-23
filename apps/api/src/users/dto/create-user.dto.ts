@@ -1,27 +1,21 @@
-import { IsEnum, IsOptional, IsString, IsMongoId, MinLength, ValidateIf, IsEmail } from 'class-validator';
-import { Role } from '../enums/role.enum';
+import { IsString, IsEmail, IsEnum, IsOptional } from 'class-validator';
+import { UserRole } from '../enums/user-role.enum';
 
 export class CreateUserDto {
-  @IsEnum(Role)
-  readonly role: Role;
-
-  @ValidateIf(o => o.role !== Role.ATTENDANT)
   @IsString()
+  clinicId: string;
+
+  @IsEnum(UserRole)
+  role: UserRole;
+
+  @IsOptional()
   @IsEmail()
-  @IsOptional()
-  readonly email?: string;
+  email?: string;
 
-  @ValidateIf(o => o.role === Role.ATTENDANT)
-  @IsMongoId()
   @IsOptional()
-  readonly clinicId?: string;
-
-  @ValidateIf(o => o.role === Role.ATTENDANT)
   @IsString()
-  @IsOptional()
-  readonly username?: string;
+  username?: string;
 
   @IsString()
-  @MinLength(8)
-  readonly password: string;
+  password: string;
 }
