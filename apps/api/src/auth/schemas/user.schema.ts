@@ -4,7 +4,7 @@ import { Role } from '../../common/enums/role.enum';
 
 @Schema({ timestamps: true })
 export class User {
-  @Prop({ type: String, enum: Role, required: true })
+  @Prop({ type: String, enum: Role, required: true, immutable: true })
   role: Role;
 
   @Prop({ type: String, unique: true, sparse: true })
@@ -16,9 +16,12 @@ export class User {
   @Prop({ type: Types.ObjectId, ref: 'Clinic', sparse: true })
   clinicId?: Types.ObjectId;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String, required: true, select: false })
   passwordHash: string;
 }
 
 export type UserDocument = User & Document;
 export const UserSchema = SchemaFactory.createForClass(User);
+
+UserSchema.index({ role: 1, email: 1 }, { unique: true, sparse: true });
+UserSchema.index({ clinicId: 1, username: 1 }, { unique: true, sparse: true });
