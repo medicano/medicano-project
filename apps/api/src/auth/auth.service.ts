@@ -25,7 +25,7 @@ export class AuthService {
   ) {}
 
   async signup(signupDto: SignupDto): Promise<AuthResponseDto> {
-    const { username, email, password, role } = signupDto;
+    const { username, email, password } = signupDto;
 
     const existingUser = await this.userModel.findOne({
       $or: [{ username }, { email }],
@@ -41,7 +41,7 @@ export class AuthService {
       username,
       email,
       password: hashedPassword,
-      role,
+      role: 'patient', // Default role for standard signup
       isActive: true,
     });
 

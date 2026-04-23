@@ -1,24 +1,16 @@
-import { IsEnum, IsEmail, IsNotEmpty, IsOptional, ValidateIf, MinLength } from 'class-validator';
-import { UserRole } from '../user.roles.enum';
+import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
 
 export class SignupDto {
-  @IsEnum(UserRole)
-  role: UserRole;
-
-  @ValidateIf(o => o.role !== UserRole.ATTENDANT)
-  @IsEmail()
+  @IsString()
   @IsNotEmpty()
-  email?: string;
+  readonly username: string;
 
-  @ValidateIf(o => o.role === UserRole.ATTENDANT)
-  @IsNotEmpty()
-  username?: string;
-
-  @ValidateIf(o => o.role === UserRole.ATTENDANT)
-  @IsNotEmpty()
-  clinicId?: string;
-
+  @IsString()
   @IsNotEmpty()
   @MinLength(8)
-  password: string;
+  readonly password: string;
+
+  @IsEmail()
+  @IsNotEmpty()
+  readonly email: string;
 }
