@@ -27,6 +27,20 @@ PROJECT_ROOT = CREW_DIR.parent
 _SCAN_DIRS = ["apps/api/src", "apps/web/src", "packages"]
 _IGNORE_DIRS = {"node_modules", ".git", "dist", "coverage", "__pycache__"}
 
+# Reference documents injected into every Aider call as read-only context.
+# Paths are relative to PROJECT_ROOT.
+_AIDER_READ_FILES = [
+    "medicano_crew/docs/CONVENTIONS.md",
+    "medicano_crew/docs/specs/feature-registry.md",
+]
+
+# Reference documents loaded and passed to CrewAI agents as context.
+# Paths are relative to PROJECT_ROOT.
+_CREW_CONTEXT_FILES = [
+    "medicano_crew/docs/CONVENTIONS.md",
+    "medicano_crew/docs/specs/feature-registry.md",
+]
+
 
 def _build_project_tree() -> str:
     lines = []
@@ -40,6 +54,21 @@ def _build_project_tree() -> str:
             if path.is_file():
                 lines.append(str(path.relative_to(PROJECT_ROOT)))
     return "\n".join(lines) if lines else "(no source files found)"
+
+
+def _load_context_files() -> str:
+    """Read reference documents and return them as a single concatenated string
+    to be injected into the CrewAI task inputs so agents are aware of existing
+    code, conventions, and the feature registry before planning anything."""
+    sections: list[str] = []
+    for rel_path in _CREW_CONTEXT_FILES:
+        abs_path = PROJECT_ROOT / rel_path
+        if abs_path.exists():
+            content = abs_path.read_text(encoding="utf-8")
+            sections.append(f"=== {rel_path} ===\n{content}")
+        else:
+            print(f"  ⚠️  Context file not found, skipping: {rel_path}")
+    return "\n\n".join(sections)
 
 
 class DevFlowState(BaseModel):
@@ -65,8 +94,16 @@ class MedicanoDevFlow(Flow[DevFlowState]):
     @listen(receive_request)
     def develop(self):
         project_tree = _build_project_tree()
+        # Load conventions and feature registry so CrewAI agents know what
+        # already exists before planning anything — prevents duplication.
+        context_docs = _load_context_files()
+
         result = DevCrew().crew().kickoff(
-            inputs={"request": self.state.request, "project_tree": project_tree}
+            inputs={
+                "request": self.state.request,
+                "project_tree": project_tree,
+                "conventions": context_docs,
+            }
         )
         # tasks order: plan=0, implement=1, document=2, review=3
         self.state.implementation = result.tasks_output[1].raw
@@ -82,12 +119,22 @@ class MedicanoDevFlow(Flow[DevFlowState]):
 
         print(f"\n🤖 Applying with Aider (prompt: output/prompts/{self.state.run_id}.txt)...\n")
 
+        # Build --read flags for every reference document that exists.
+        read_flags: list[str] = []
+        for rel_path in _AIDER_READ_FILES:
+            abs_path = PROJECT_ROOT / rel_path
+            if abs_path.exists():
+                read_flags += ["--read", str(abs_path)]
+            else:
+                print(f"  ⚠️  Reference file not found, skipping: {rel_path}")
+
         subprocess.run(
             [
                 "aider",
                 "--env-file", str(CREW_DIR / ".env"),
                 "--message-file", str(prompt_file),
                 "--yes-always",
+                *read_flags,
             ],
             cwd=str(PROJECT_ROOT),
             check=True,

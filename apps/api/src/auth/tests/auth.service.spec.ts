@@ -1,26 +1,34 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getModelToken } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
 import { AuthService } from '../auth.service';
 import { RedisService } from '../../redis/redis.service';
-import { User } from '../schemas/user.schema';
+import { UsersService } from '../../users/users.service';
 import { Role } from '../../common/enums/role.enum';
 
-jest.mock('bcrypt');
+const mockUserId = '507f1f77bcf86cd799439011';
 
-const mockSave = jest.fn();
+const existingUser = {
+  _id: { toString: () => mockUserId },
+  email: 'test@test.com',
+  passwordHash: '$2b$12$hashedPassword',
+  role: Role.PATIENT,
+};
 
-function MockUserModel(this: any, dto: any) {
-  Object.assign(this, {
-    ...dto,
-    _id: { toString: () => '507f1f77bcf86cd799439011' },
-    save: mockSave,
-  });
-}
-MockUserModel.findOne = jest.fn();
-MockUserModel.findById = jest.fn();
+const attendantUser = {
+  _id: { toString: () => mockUserId },
+  username: 'attendant01',
+  passwordHash: '$2b$12$hashedPassword',
+  role: Role.ATTENDANT,
+};
+
+const mockUsersService = {
+  createUser: jest.fn(),
+  comparePassword: jest.fn(),
+  getById: jest.fn(),
+  findByEmailAndRole: jest.fn(),
+  findByClinicIdAndUsername: jest.fn(),
+};
 
 const mockRedisService = {
   saveToken: jest.fn(),
@@ -35,19 +43,11 @@ const mockJwtService = {
 describe('AuthService', () => {
   let authService: AuthService;
 
-  const existingUser = {
-    _id: { toString: () => '507f1f77bcf86cd799439011' },
-    email: 'test@test.com',
-    username: 'testuser',
-    passwordHash: '$2b$10$hashedPassword',
-    role: Role.PATIENT,
-  };
-
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
-        { provide: getModelToken(User.name), useValue: MockUserModel },
+        { provide: UsersService, useValue: mockUsersService },
         { provide: RedisService, useValue: mockRedisService },
         { provide: JwtService, useValue: mockJwtService },
       ],
@@ -58,70 +58,146 @@ describe('AuthService', () => {
 
   afterEach(() => jest.clearAllMocks());
 
+  // ─── signup ────────────────────────────────────────────────────────────────
+
   describe('signup', () => {
     const signupDto = {
-      name: 'Test User',
       email: 'test@test.com',
       password: 'password123',
       role: Role.PATIENT,
     };
 
-    it('should create a new user and return access token', async () => {
-      MockUserModel.findOne.mockResolvedValue(null);
-      (bcrypt.hash as jest.Mock).mockResolvedValue('hashedPassword');
-      mockSave.mockResolvedValue(undefined);
+    it('should create a new user, store JWT in Redis, and return accessToken', async () => {
+      mockUsersService.createUser.mockResolvedValue(existingUser);
       mockJwtService.sign.mockReturnValue('jwt.token.here');
       mockRedisService.saveToken.mockResolvedValue(undefined);
 
       const result = await authService.signup(signupDto);
 
-      expect(result.accessToken).toBe('jwt.token.here');
-      expect(result.expiresIn).toBe(604800);
-      expect(mockRedisService.saveToken).toHaveBeenCalled();
+      expect(mockUsersService.createUser).toHaveBeenCalledWith(signupDto);
+      expect(mockJwtService.sign).toHaveBeenCalledWith({
+        sub: mockUserId,
+        role: Role.PATIENT,
+      });
+      expect(mockRedisService.saveToken).toHaveBeenCalledWith(
+        mockUserId,
+        'jwt.token.here',
+        7 * 24 * 3600,
+      );
+      expect(result).toEqual({ accessToken: 'jwt.token.here' });
     });
 
-    it('should throw ConflictException if user already exists', async () => {
-      MockUserModel.findOne.mockResolvedValue(existingUser);
+    it('should propagate ConflictException if user already exists', async () => {
+      mockUsersService.createUser.mockRejectedValue(
+        new ConflictException('User already exists'),
+      );
 
       await expect(authService.signup(signupDto)).rejects.toThrow(ConflictException);
     });
   });
 
+  // ─── loginStandard ─────────────────────────────────────────────────────────
+
   describe('loginStandard', () => {
     const loginDto = { email: 'test@test.com', password: 'password123' };
 
-    it('should return access token for valid credentials', async () => {
-      MockUserModel.findOne.mockResolvedValue(existingUser);
-      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    it('should return accessToken for valid credentials', async () => {
+      mockUsersService.findByEmailAndRole.mockResolvedValue(existingUser);
+      mockUsersService.comparePassword.mockResolvedValue(true);
       mockJwtService.sign.mockReturnValue('jwt.token.here');
       mockRedisService.saveToken.mockResolvedValue(undefined);
 
       const result = await authService.loginStandard(loginDto);
 
-      expect(result.accessToken).toBe('jwt.token.here');
-      expect(result.expiresIn).toBe(604800);
+      expect(mockUsersService.findByEmailAndRole).toHaveBeenCalledWith(
+        loginDto.email,
+        Role.PATIENT,
+      );
+      expect(mockUsersService.comparePassword).toHaveBeenCalledWith(
+        loginDto.password,
+        existingUser.passwordHash,
+      );
+      expect(mockRedisService.saveToken).toHaveBeenCalledWith(
+        mockUserId,
+        'jwt.token.here',
+        7 * 24 * 3600,
+      );
+      expect(result).toEqual({ accessToken: 'jwt.token.here' });
     });
 
     it('should throw UnauthorizedException if user not found', async () => {
-      MockUserModel.findOne.mockResolvedValue(null);
+      mockUsersService.findByEmailAndRole.mockResolvedValue(null);
 
-      await expect(authService.loginStandard(loginDto)).rejects.toThrow(UnauthorizedException);
+      await expect(authService.loginStandard(loginDto)).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('should throw UnauthorizedException if password is incorrect', async () => {
-      MockUserModel.findOne.mockResolvedValue(existingUser);
-      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+      mockUsersService.findByEmailAndRole.mockResolvedValue(existingUser);
+      mockUsersService.comparePassword.mockResolvedValue(false);
 
-      await expect(authService.loginStandard(loginDto)).rejects.toThrow(UnauthorizedException);
+      await expect(authService.loginStandard(loginDto)).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 
+  // ─── loginAttendant ────────────────────────────────────────────────────────
+
+  describe('loginAttendant', () => {
+    const loginDto = {
+      clinicId: '507f1f77bcf86cd799439022',
+      username: 'attendant01',
+      password: 'password123',
+    };
+
+    it('should return accessToken for valid attendant credentials', async () => {
+      mockUsersService.findByClinicIdAndUsername.mockResolvedValue(attendantUser);
+      mockUsersService.comparePassword.mockResolvedValue(true);
+      mockJwtService.sign.mockReturnValue('jwt.attendant.token');
+      mockRedisService.saveToken.mockResolvedValue(undefined);
+
+      const result = await authService.loginAttendant(loginDto);
+
+      expect(mockUsersService.findByClinicIdAndUsername).toHaveBeenCalledWith(
+        loginDto.clinicId,
+        loginDto.username,
+      );
+      expect(mockUsersService.comparePassword).toHaveBeenCalledWith(
+        loginDto.password,
+        attendantUser.passwordHash,
+      );
+      expect(result).toEqual({ accessToken: 'jwt.attendant.token' });
+    });
+
+    it('should throw UnauthorizedException if attendant not found', async () => {
+      mockUsersService.findByClinicIdAndUsername.mockResolvedValue(null);
+
+      await expect(authService.loginAttendant(loginDto)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should throw UnauthorizedException if password is incorrect', async () => {
+      mockUsersService.findByClinicIdAndUsername.mockResolvedValue(attendantUser);
+      mockUsersService.comparePassword.mockResolvedValue(false);
+
+      await expect(authService.loginAttendant(loginDto)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+  });
+
+  // ─── logout ────────────────────────────────────────────────────────────────
+
   describe('logout', () => {
-    it('should remove token from Redis', async () => {
+    it('should call RedisService.removeToken with the correct userId', async () => {
       mockRedisService.removeToken.mockResolvedValue(undefined);
 
-      await expect(authService.logout('507f1f77bcf86cd799439011')).resolves.not.toThrow();
-      expect(mockRedisService.removeToken).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+      await expect(authService.logout(mockUserId)).resolves.not.toThrow();
+      expect(mockRedisService.removeToken).toHaveBeenCalledWith(mockUserId);
+      expect(mockRedisService.removeToken).toHaveBeenCalledTimes(1);
     });
   });
 });
