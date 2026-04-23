@@ -1,42 +1,23 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { APP_FILTER, APP_PIPE } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
-import { UserModule } from './users/user.module';
-import { ClinicsModule } from './clinics/clinics.module';
-import { ProfessionalsModule } from './professionals/professionals.module';
-import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
+      useFactory: async (configService: ConfigService) => ({
         uri: configService.get<string>('MONGODB_URI'),
       }),
+      inject: [ConfigService],
     }),
     AuthModule,
-    UserModule,
-    ClinicsModule,
-    ProfessionalsModule,
   ],
-  providers: [
-    {
-      provide: APP_PIPE,
-      useValue: new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    },
-    {
-      provide: APP_FILTER,
-      useClass: AllExceptionsFilter,
-    },
-  ],
+  controllers: [],
+  providers: [],
 })
 export class AppModule {}
