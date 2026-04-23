@@ -1,8 +1,11 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { ClinicsModule } from './clinics/clinics.module';
+import { ProfessionalsModule } from './professionals/professionals.module';
+import { ClinicProfessionalsModule } from './professionals/clinic-professionals.module';
 
 @Module({
   imports: [
@@ -10,12 +13,17 @@ import { UsersModule } from './users/users.module';
       isGlobal: true,
     }),
     MongooseModule.forRootAsync({
-      useFactory: () => ({
-        uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/medicano',
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => ({
+        uri: configService.get<string>('MONGODB_URI') || 'mongodb://localhost:27017/medicano',
       }),
+      inject: [ConfigService],
     }),
     AuthModule,
     UsersModule,
+    ClinicsModule,
+    ProfessionalsModule,
+    ClinicProfessionalsModule,
   ],
 })
 export class AppModule {}
