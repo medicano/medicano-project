@@ -4,7 +4,7 @@ This file is the canonical inventory of every file, class, and method that alrea
 exists in the codebase. Before creating anything, check here first.
 If it is listed here, **do not recreate it** — import it from the path shown.
 
-Last updated: 2026-04-23 (sprint-01-auth complete)
+Last updated: 2026-04-23 (sprint-01-auth implementation complete)
 
 ---
 
@@ -51,12 +51,15 @@ export class AllExceptionsFilter implements ExceptionFilter
 ### `redis/redis.service.ts` ✅
 ```typescript
 @Injectable()
-export class RedisService implements OnModuleInit, OnModuleDestroy
-// Reads: REDIS_HOST, REDIS_PORT, REDIS_PASSWORD, REDIS_DB from ConfigService
+export class RedisService
+// Reads: REDIS_HOST (default 'localhost'), REDIS_PORT (default 6379) from ConfigService
+// ioredis client created in constructor (no OnModuleInit)
 // Redis key pattern: auth:token:{userId}
 
 saveToken(userId: string, token: string, ttl: number): Promise<void>
 getToken(userId: string): Promise<string | null>
+validateToken(userId: string, token: string): Promise<boolean>
+  // returns true if storedToken === token
 removeToken(userId: string): Promise<void>
 ```
 
@@ -65,7 +68,7 @@ removeToken(userId: string): Promise<void>
 @Global()
 @Module({ providers: [RedisService], exports: [RedisService] })
 export class RedisModule
-// Global — RedisService is available everywhere without importing RedisModule
+// Global — import once in AppModule; RedisService is available everywhere
 ```
 
 ---
@@ -89,25 +92,46 @@ export const UserSchema = SchemaFactory.createForClass(User)
 //   { clinicId, username } unique sparse
 ```
 
-### `auth/interfaces/jwt-payload.interface.ts` ✅
+### `auth/dto/signup.dto.ts` ✅
 ```typescript
-export interface JwtPayload {
-  sub: string;       // userId
-  username: string;  // NOTE: current impl uses username; target spec uses role
-}
+export class SignupDto
+  role: Role          // @IsEnum — required
+  email?: string      // @IsEmail @IsOptional
+  username?: string   // @IsString @IsOptional
+  clinicId?: string   // @IsMongoId @IsOptional
+  password: string    // @IsString @MinLength(8)
 ```
 
-> ⚠️ **Known deviation**: Current `JwtPayload` has `username` instead of `role`. Target spec requires `{ sub: string; role: Role }`. When rewriting auth, fix this.
+### `auth/dto/login-standard.dto.ts` ✅
+```typescript
+export class LoginStandardDto
+  email: string    // @IsEmail
+  password: string // @IsString @MinLength(8)
+```
+
+### `auth/dto/login-attendant.dto.ts` ✅
+```typescript
+export class LoginAttendantDto
+  clinicId: string  // @IsMongoId
+  username: string  // @IsString
+  password: string  // @IsString @MinLength(8)
+```
 
 ### `auth/jwt.strategy.ts` ✅
 ```typescript
-@Injectable()
-export class JwtStrategy extends PassportStrategy(Strategy)
+// JwtPayload (inline interface): { sub: string; role: Role }
 // Location: auth/jwt.strategy.ts (directly in auth/, NOT in a strategies/ subfolder)
 // Test imports: import { JwtStrategy } from '../jwt.strategy'
 
-validate(payload: JwtPayload): Promise<{ userId: string; username: string }>
-// Checks redisService.getToken(payload.sub) — throws UnauthorizedException if null
+@Injectable()
+export class JwtStrategy extends PassportStrategy(Strategy)
+// constructor: reads JWT_SECRET from ConfigService (default 'default-secret')
+// ExtractJwt.fromAuthHeaderAsBearerToken()
+
+validate(payload: JwtPayload): Promise<{ userId: string; role: Role }>
+// Calls redisService.getToken(payload.sub)
+// Throws UnauthorizedException if null (token revoked)
+// Returns { userId: payload.sub, role: payload.role }
 ```
 
 ### `auth/guards/jwt-auth.guard.ts` ✅
@@ -116,126 +140,130 @@ validate(payload: JwtPayload): Promise<{ userId: string; username: string }>
 export class JwtAuthGuard extends AuthGuard('jwt')
 ```
 
-### `auth/constants.ts` ✅
-Contains JWT-related constants.
-
-### `auth/dto/signup.dto.ts` ✅
-```typescript
-export class SignupDto
-  role: Role
-  email?: string
-  username?: string
-  clinicId?: string
-  password: string
-```
-
-### `auth/dto/login-standard.dto.ts` ✅
-```typescript
-export class LoginStandardDto
-  email: string
-  password: string
-```
-
-### `auth/dto/login-attendant.dto.ts` ✅
-```typescript
-export class LoginAttendantDto
-  clinicId: string   // @IsMongoId()
-  username: string
-  password: string
-```
-
-### `auth/dto/login.dto.ts` ✅
-```typescript
-export class LoginDto   // legacy generic login DTO
-  email: string
-  password: string
-```
-
-### `auth/dto/logout.dto.ts` ✅
-```typescript
-export class LogoutDto
-```
-
-### `auth/dto/auth-response.dto.ts` ✅
-```typescript
-export class AuthResponseDto
-  accessToken: string
-  expiresIn: number   // 604800
-```
-
 ### `auth/auth.service.ts` ✅
-
-> ⚠️ **Known deviations from spec**:
-> - Uses `@InjectModel(User.name)` directly — does not use `UsersService`
-> - `bcrypt.hash(password, 10)` — spec requires cost **12**
-> - Only one login method (`loginStandard`) using generic `LoginDto` — attendant login not implemented
-> - Has extra `validateUser(userId)` method not in spec
-
 ```typescript
 @Injectable()
 export class AuthService
-  signup(signupDto: SignupDto): Promise<AuthResponseDto>
-  loginStandard(loginDto: LoginDto): Promise<AuthResponseDto>
-  logout(userId: string): Promise<void>
-  validateUser(userId: string): Promise<UserDocument>
+// TOKEN_TTL = 7 * 24 * 3600 (604800s)
+// STANDARD_ROLES = [Role.PATIENT, Role.CLINIC, Role.PROFESSIONAL]
+
+signup(dto: SignupDto): Promise<{ accessToken: string }>
+  // calls usersService.createUser(dto)
+  // signs JWT { sub: userId, role }
+  // saves token to Redis with TOKEN_TTL
+
+loginStandard(dto: LoginStandardDto): Promise<{ accessToken: string }>
+  // tries findByEmailAndRole for each role in STANDARD_ROLES until found
+  // throws UnauthorizedException if not found or wrong password
+
+loginAttendant(dto: LoginAttendantDto): Promise<{ accessToken: string }>
+  // calls usersService.findByClinicIdAndUsername(clinicId, username)
+  // throws UnauthorizedException if not found or wrong password
+
+logout(userId: string): Promise<void>
+  // calls redisService.removeToken(userId)
 ```
 
 ### `auth/auth.controller.ts` ✅
 ```typescript
 @Controller('auth')
 export class AuthController
-  POST /auth/signup         → authService.signup()         @HttpCode(201)
-  POST /auth/login          → authService.loginStandard()  @HttpCode(200)
-  POST /auth/logout         → authService.logout()         @HttpCode(204) @UseGuards(JwtAuthGuard)
+  POST /auth/signup            → authService.signup()          @HttpCode(201) — default
+  POST /auth/login             → authService.loginStandard()   @HttpCode(200)
+  POST /auth/login/attendant   → authService.loginAttendant()  @HttpCode(200)
+  POST /auth/logout            → authService.logout()          @HttpCode(204) @UseGuards(JwtAuthGuard)
+// logout uses @CurrentUser() to extract userId from JWT
 ```
 
 ### `auth/auth.module.ts` ✅
 ```typescript
 @Module({
-  imports: [PassportModule, JwtModule (registerAsync), MongooseModule(User), RedisModule],
+  imports: [
+    PassportModule,
+    JwtModule.registerAsync({ secret: JWT_SECRET, expiresIn: '7d' }),
+    UsersModule,
+  ],
+  controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
-  exports: [AuthService, JwtStrategy, PassportModule],
+  exports: [AuthService],
 })
 export class AuthModule
+// Does NOT import RedisModule — RedisService is available via @Global() RedisModule in AppModule
+// Does NOT import MongooseModule — User model is registered in UsersModule
 ```
 
 ### Auth tests — `auth/tests/` ✅
 ```
-auth/tests/auth.service.spec.ts
-auth/tests/redis.service.spec.ts
-auth/tests/jwt.strategy.spec.ts
-auth/tests/auth.e2e.spec.ts
+auth/tests/auth.service.spec.ts    — 9 tests, all pass
+auth/tests/redis.service.spec.ts   — 8 tests, all pass
+auth/tests/jwt.strategy.spec.ts    — 3 tests, all pass
+auth/tests/auth.e2e.spec.ts        — 9 tests, require MongoDB + Redis (skip in unit CI)
 ```
 
 ---
 
 ## Users — `apps/api/src/users`
 
+### `users/dto/create-user.dto.ts` ✅
+```typescript
+export class CreateUserDto
+  role: Role          // @IsEnum — required
+  email?: string      // @IsEmail @IsOptional
+  username?: string   // @IsString @IsOptional
+  clinicId?: string   // @IsMongoId @IsOptional
+  password: string    // @IsString @MinLength(8) — hashed inside UsersService.createUser
+```
+
+### `users/dto/update-user.dto.ts` ✅
+```typescript
+export class UpdateUserDto   // role is immutable — never in update DTO
+  email?: string      // @IsEmail @IsOptional
+  username?: string   // @IsString @IsOptional
+  clinicId?: string   // @IsMongoId @IsOptional
+```
+
 ### `users/users.service.ts` ✅
-
-> ⚠️ **Known deviation**: Spec (sprint-01 prompt 5) calls for `hashPassword`, `comparePassword`,
-> `createUser`, and a `UsersRepository`. Current implementation is a simpler read-only service.
-
 ```typescript
 @Injectable()
 export class UsersService
-  findById(id: string): Promise<UserDocument | null>
-  findByEmail(email: string): Promise<UserDocument | null>
-  findAll(): Promise<UserDocument[]>
-  delete(id: string): Promise<void>
+// Injects: Model<UserDocument> (User schema registered in UsersModule)
+
+createUser(dto: CreateUserDto): Promise<UserDocument>
+  // hashes dto.password with bcrypt cost 12, stores as passwordHash
+  // catches MongoError 11000 → ConflictException('User already exists')
+
+comparePassword(password: string, passwordHash: string): Promise<boolean>
+  // bcrypt.compare — use after querying with .select('+passwordHash')
+
+getById(id: string): Promise<UserDocument>
+  // validates ObjectId → NotFoundException for invalid id or not found
+
+findByEmailAndRole(email: string, role: Role): Promise<UserDocument | null>
+  // .select('+passwordHash') — returns null if not found
+
+findByClinicIdAndUsername(clinicId: string, username: string): Promise<UserDocument | null>
+  // .select('+passwordHash') — returns null if not found
+```
+
+### `users/users.controller.ts` ✅
+```typescript
+@Controller('users') @UseGuards(JwtAuthGuard)
+export class UsersController
+  GET /users/:id → usersService.getById()
 ```
 
 ### `users/users.module.ts` ✅
 ```typescript
 @Module({
-  imports: [MongooseModule.forFeature([User])],
+  imports: [MongooseModule.forFeature([{ name: User.name, schema: UserSchema }])],
+  controllers: [UsersController],
   providers: [UsersService],
   exports: [UsersService],
 })
 export class UsersModule
+// User schema is imported from auth/schemas/user.schema.ts
+// AuthModule imports UsersModule to access UsersService
 ```
-
-> **Missing**: `UsersRepository` — not yet created.
 
 ---
 
@@ -249,8 +277,8 @@ export enum SubscriptionStatus {
 
 @Schema({ timestamps: true })
 export class Clinic
-  name: string            // required
-  subscriptionStatus: SubscriptionStatus  // default: TRIAL
+  name: string                                // required
+  subscriptionStatus: SubscriptionStatus      // default: TRIAL
 
 export type ClinicDocument = Clinic & Document
 export const ClinicSchema = SchemaFactory.createForClass(Clinic)
@@ -415,8 +443,8 @@ export class ClinicProfessionalsModule
 ## App Root — `apps/api/src`
 
 ### `app.module.ts` ✅
-Imports: ConfigModule (global), MongooseModule (forRootAsync), RedisModule, AuthModule,
-UsersModule, ClinicsModule, ProfessionalsModule, ClinicProfessionalsModule
+Imports: ConfigModule (global), MongooseModule (forRootAsync), RedisModule (global),
+AuthModule, UsersModule, ClinicsModule, ProfessionalsModule, ClinicProfessionalsModule
 
 ### `main.ts` ✅
 Bootstrap: ValidationPipe (whitelist, forbidNonWhitelisted, transform), AllExceptionsFilter,
@@ -429,10 +457,6 @@ enableCors(), port from `process.env.PORT ?? 3000`
 | Module | Status | Notes |
 |---|---|---|
 | `packages/types/src/` | ❌ Not created | auth.ts and index.ts needed |
-| `auth` — attendant login | ❌ Missing | `loginAttendant(dto: LoginAttendantDto)` not implemented |
-| `auth` — bcrypt cost | ⚠️ Wrong (10) | Must be **12** |
-| `auth` — JWT payload | ⚠️ Has `username` | Should have `role: Role` per spec |
-| `users` — UsersRepository | ❌ Missing | hashPassword, comparePassword, createUser pattern |
 | `auth/decorators/roles.decorator.ts` | ❌ Not created | `@Roles(...roles)` decorator |
 | `auth/guards/roles.guard.ts` | ❌ Not created | `RolesGuard` |
 | `appointments` module | ❌ Not started | Full CRUD + conflict detection |
