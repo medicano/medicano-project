@@ -76,6 +76,10 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
+    "moduleNameMapper": {
+      "^@medicano/types$": "<rootDir>/../../../packages/types/src/index.ts",
+      "^@medicano/types/(.*)$": "<rootDir>/../../../packages/types/src/$1"
+    },
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],
