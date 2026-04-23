@@ -2,38 +2,35 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { AuthService } from '../auth.service';
-
-export interface JwtPayload {
-  userId: string;
-  email: string;
-  role: string;
-}
+import { RedisService } from '../../redis/redis.service';
+import { JwtPayload } from '../interfaces/jwt-payload.interface';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     private configService: ConfigService,
-    private authService: AuthService,
+    private redisService: RedisService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET', 'your-secret-key'),
+      secretOrKey:
+        configService.get<string>('JWT_SECRET') || 'medicano-secret-key',
     });
   }
 
-  async validate(payload: JwtPayload) {
-    const user = await this.authService.validateUser(payload.userId);
+  async validate(payload: JwtPayload): Promise<{ userId: string; username: string }> {
+    const userId = payload.sub;
 
-    if (!user || !user.isActive) {
-      throw new UnauthorizedException('User not found or inactive');
+    const storedToken = await this.redisService.getToken(userId);
+
+    if (!storedToken) {
+      throw new UnauthorizedException('Token has been revoked or expired');
     }
 
     return {
-      userId: payload.userId,
-      email: payload.email,
-      role: payload.role,
+      userId: payload.sub,
+      username: payload.username,
     };
   }
 }
