@@ -5,6 +5,8 @@ import { APP_FILTER, APP_PIPE } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './users/user.module';
+import { ClinicsModule } from './clinics/clinics.module';
+import { ProfessionalsModule } from './professionals/professionals.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 @Module({
@@ -19,6 +21,8 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     }),
     AuthModule,
     UserModule,
+    ClinicsModule,
+    ProfessionalsModule,
   ],
   providers: [
     {
