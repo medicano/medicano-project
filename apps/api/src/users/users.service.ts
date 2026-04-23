@@ -1,90 +1,47 @@
-import { Injectable, ConflictException, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
-import { UsersRepository } from './users.repository';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UserResponseDto } from './dto/user-response.dto';
-import { UserRole } from './enums/user-role.enum';
-import { Types } from 'mongoose';
+import { User } from './schemas/user.schema';
+import { UserRole } from '../auth/enums/user-role.enum';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly usersRepository: UsersRepository) {}
+  constructor(@InjectModel(User.name) private userModel: Model<User>) {}
 
-  async hashPassword(plain: string): Promise<string> {
-    return bcrypt.hash(plain, 12);
+  async findById(id: string): Promise<User | null> {
+    return this.userModel.findById(id).exec();
   }
 
-  async comparePassword(plain: string, hash: string): Promise<boolean> {
-    return bcrypt.compare(plain, hash);
+  async findByEmail(email: string): Promise<User | null> {
+    return this.userModel.findOne({ email }).exec();
   }
 
-  async createUser(dto: CreateUserDto): Promise<UserResponseDto> {
-    // Validate role-based field requirements
-    if (dto.role === UserRole.ATTENDANT) {
-      if (!dto.username) {
-        throw new BadRequestException('Username is required for attendant role');
-      }
-      if (dto.email) {
-        throw new BadRequestException('Email must not be provided for attendant role');
-      }
-    } else {
-      if (!dto.email) {
-        throw new BadRequestException('Email is required for non-attendant roles');
-      }
-      if (dto.username) {
-        throw new BadRequestException('Username must not be provided for non-attendant roles');
-      }
+  async validateUserCredentials(email: string, password: string): Promise<User | null> {
+    const user = await this.findByEmail(email);
+    
+    if (!user) {
+      return null;
     }
 
-    // Check for duplicate email and role combination
-    if (dto.email) {
-      const existingByEmail = await this.usersRepository.findByEmailAndRole(dto.email, dto.role);
-      if (existingByEmail) {
-        throw new ConflictException('User with this email and role already exists');
-      }
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    
+    if (!isPasswordValid) {
+      return null;
     }
 
-    // Check for duplicate clinicId and username combination
-    if (dto.username) {
-      const existingByUsername = await this.usersRepository.findByClinicIdAndUsername(
-        dto.clinicId,
-        dto.username,
-      );
-      if (existingByUsername) {
-        throw new ConflictException('User with this username already exists in this clinic');
-      }
-    }
+    return user;
+  }
 
-    // Hash password
-    const passwordHash = await this.hashPassword(dto.password);
-
-    // Create user
-    const user = await this.usersRepository.create({
-      clinicId: new Types.ObjectId(dto.clinicId),
-      role: dto.role,
-      email: dto.email?.toLowerCase(),
-      username: dto.username?.toLowerCase(),
-      passwordHash,
+  async create(email: string, password: string, role: UserRole = UserRole.USER): Promise<User> {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    const newUser = new this.userModel({
+      email,
+      password: hashedPassword,
+      role,
     });
 
-    return this.mapToResponseDto(user);
-  }
-
-  async getById(id: string): Promise<UserResponseDto> {
-    const user = await this.usersRepository.findById(id);
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-    return this.mapToResponseDto(user);
-  }
-
-  private mapToResponseDto(user: any): UserResponseDto {
-    return {
-      id: user._id.toString(),
-      clinicId: user.clinicId.toString(),
-      role: user.role,
-      email: user.email,
-      username: user.username,
-    };
+    return newUser.save();
   }
 }

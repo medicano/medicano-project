@@ -3,47 +3,44 @@ import {
   Post,
   Body,
   UseGuards,
-  Request,
+  Req,
   HttpCode,
-  HttpStatus,
+  Get,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
-import { LoginResponseDto } from './dto/login-response.dto';
-import { LogoutResponseDto } from './dto/logout-response.dto';
-import { JwtRedisAuthGuard } from './guards/jwt-redis-auth.guard';
+import { AuthTokenDto } from './dto/auth-token.dto';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { CurrentUser } from './decorators/current-user.decorator';
+import { Request } from 'express';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Post('register')
-  @HttpCode(HttpStatus.CREATED)
-  async register(
-    @Body('email') email: string,
-    @Body('password') password: string,
-    @Body('name') name: string,
-  ) {
-    const user = await this.authService.register(email, password, name);
-    return {
-      id: user._id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-    };
-  }
-
   @Post('login')
-  @HttpCode(HttpStatus.OK)
-  async login(@Body() loginDto: LoginDto): Promise<LoginResponseDto> {
-    return this.authService.login(loginDto);
+  @HttpCode(200)
+  async login(@Body() dto: LoginDto): Promise<AuthTokenDto> {
+    return this.authService.login(dto);
   }
 
+  @UseGuards(JwtAuthGuard)
   @Post('logout')
-  @UseGuards(JwtRedisAuthGuard)
-  @HttpCode(HttpStatus.OK)
-  async logout(@Request() req: any): Promise<LogoutResponseDto> {
-    const userId = req.user.userId;
-    return this.authService.logout(userId);
+  @HttpCode(200)
+  async logout(@Req() req: Request, @CurrentUser() user: any): Promise<{ success: boolean }> {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.split(' ')[1];
+    
+    if (token) {
+      await this.authService.logout(user.userId, token);
+    }
+    
+    return { success: true };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('profile')
+  async getProfile(@CurrentUser() user: any) {
+    return user;
   }
 }
