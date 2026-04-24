@@ -90,7 +90,7 @@ describe('SubscriptionsService', () => {
       });
       mockSubscriptionModel.create.mockResolvedValue(created);
 
-      const result = await service.create(dto as never);
+      const result = await service.create(dto);
 
       expect(mockClinicsService.findById).toHaveBeenCalledWith(mockClinicId);
       expect(mockSubscriptionModel.create).toHaveBeenCalled();
@@ -195,6 +195,38 @@ describe('SubscriptionsService', () => {
       await expect(service.findById('invalid-id')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('update', () => {
+    it('should update plan and status', async () => {
+      const existing = {
+        _id: mockId,
+        clinicId: new Types.ObjectId(mockClinicId),
+        plan: SubscriptionPlan.FREE,
+        status: SubscriptionStatus.TRIAL,
+      };
+
+      const updated = {
+        ...existing,
+        plan: SubscriptionPlan.BASIC,
+        status: SubscriptionStatus.ACTIVE,
+      };
+
+      mockSubscriptionModel.findById.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(existing),
+      });
+      mockSubscriptionModel.findByIdAndUpdate.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(updated),
+      });
+
+      const result = await service.update(mockId, {
+        plan: SubscriptionPlan.BASIC,
+        status: SubscriptionStatus.ACTIVE,
+      });
+
+      expect(result.plan).toBe(SubscriptionPlan.BASIC);
+      expect(result.status).toBe(SubscriptionStatus.ACTIVE);
     });
   });
 

@@ -1,19 +1,32 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Professional, ProfessionalDocument } from './schemas/professional.schema';
+import {
+  Professional,
+  ProfessionalDocument,
+} from './schemas/professional.schema';
 import { CreateProfessionalDto } from './dto/create-professional.dto';
 import { UpdateProfessionalDto } from './dto/update-professional.dto';
 
 @Injectable()
 export class ProfessionalsService {
   constructor(
-    @InjectModel(Professional.name) private professionalModel: Model<ProfessionalDocument>,
+    @InjectModel(Professional.name)
+    private professionalModel: Model<ProfessionalDocument>,
   ) {}
 
-  async create(createProfessionalDto: CreateProfessionalDto): Promise<ProfessionalDocument> {
+  async create(
+    createProfessionalDto: CreateProfessionalDto,
+  ): Promise<ProfessionalDocument> {
     if (!Types.ObjectId.isValid(createProfessionalDto.userId)) {
-      throw new BadRequestException(`Invalid user ID: ${createProfessionalDto.userId}`);
+      throw new BadRequestException(
+        `Invalid user ID: ${createProfessionalDto.userId}`,
+      );
     }
 
     try {
@@ -22,9 +35,11 @@ export class ProfessionalsService {
         userId: new Types.ObjectId(createProfessionalDto.userId),
       });
       return await professional.save();
-    } catch (error: any) {
-      if (error.code === 11000) {
-        throw new ConflictException('A professional with this userId already exists');
+    } catch (error: unknown) {
+      if ((error as { code?: number }).code === 11000) {
+        throw new ConflictException(
+          'A professional with this userId already exists',
+        );
       }
       throw error;
     }
@@ -51,7 +66,10 @@ export class ProfessionalsService {
     return professional;
   }
 
-  async update(id: string, updateProfessionalDto: UpdateProfessionalDto): Promise<ProfessionalDocument> {
+  async update(
+    id: string,
+    updateProfessionalDto: UpdateProfessionalDto,
+  ): Promise<ProfessionalDocument> {
     if (!Types.ObjectId.isValid(id)) {
       throw new NotFoundException(`Invalid professional ID: ${id}`);
     }

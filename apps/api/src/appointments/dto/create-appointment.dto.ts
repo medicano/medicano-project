@@ -1,4 +1,12 @@
-import { IsMongoId, IsDateString, IsInt, Min, Max, IsString, IsOptional } from 'class-validator';
+import {
+  IsMongoId,
+  IsDateString,
+  IsInt,
+  Min,
+  Max,
+  IsString,
+  IsOptional,
+} from 'class-validator';
 
 export class CreateAppointmentDto {
   @IsMongoId()

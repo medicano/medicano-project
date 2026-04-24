@@ -44,7 +44,8 @@ export class AuthService {
       dto.password,
       user.passwordHash,
     );
-    if (!isPasswordValid) throw new UnauthorizedException('Invalid credentials');
+    if (!isPasswordValid)
+      throw new UnauthorizedException('Invalid credentials');
 
     const userId = String(user._id);
     const accessToken = this.jwtService.sign({ sub: userId, role: user.role });
@@ -64,7 +65,8 @@ export class AuthService {
       dto.password,
       user.passwordHash,
     );
-    if (!isPasswordValid) throw new UnauthorizedException('Invalid credentials');
+    if (!isPasswordValid)
+      throw new UnauthorizedException('Invalid credentials');
 
     const userId = String(user._id);
     const accessToken = this.jwtService.sign({ sub: userId, role: user.role });

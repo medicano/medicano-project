@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import * as bcrypt from 'bcrypt';
@@ -16,19 +20,27 @@ export class UsersService {
 
   async createUser(dto: CreateUserDto): Promise<UserDocument> {
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_COST);
-    const { password, ...userFields } = dto;
-    const newUser = new this.userModel({ ...userFields, passwordHash });
+    const newUser = new this.userModel({
+      role: dto.role,
+      email: dto.email,
+      username: dto.username,
+      clinicId: dto.clinicId,
+      passwordHash,
+    });
     try {
       return await newUser.save();
-    } catch (error: any) {
-      if (error.code === 11000) {
+    } catch (error: unknown) {
+      if ((error as { code?: number }).code === 11000) {
         throw new ConflictException('User already exists');
       }
       throw error;
     }
   }
 
-  async comparePassword(password: string, passwordHash: string): Promise<boolean> {
+  async comparePassword(
+    password: string,
+    passwordHash: string,
+  ): Promise<boolean> {
     return bcrypt.compare(password, passwordHash);
   }
 
@@ -43,7 +55,10 @@ export class UsersService {
     return user;
   }
 
-  async findByEmailAndRole(email: string, role: Role): Promise<UserDocument | null> {
+  async findByEmailAndRole(
+    email: string,
+    role: Role,
+  ): Promise<UserDocument | null> {
     return this.userModel
       .findOne({ email, role })
       .select('+passwordHash')

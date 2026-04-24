@@ -1,12 +1,10 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   HttpCode,
   Param,
   Post,
-  Query,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -15,7 +13,6 @@ import { ParseMongoIdPipe } from '../common/pipes/parse-mongo-id.pipe';
 import { ChatService } from './chat.service';
 import { CreateChatSessionDto } from './dto/create-chat-session.dto';
 import { CreateChatMessageDto } from './dto/create-chat-message.dto';
-import { GetChatMessagesQueryDto } from './dto/get-chat-messages-query.dto';
 import { ChatSessionDocument } from './schemas/chat-session.schema';
 import { ChatMessageDocument } from './schemas/chat-message.schema';
 
@@ -29,40 +26,29 @@ export class ChatController {
     @CurrentUser() userId: string,
     @Body() dto: CreateChatSessionDto,
   ): Promise<ChatSessionDocument> {
-    return this.chatService.createSession(userId, dto);
+    return this.chatService.createSession({ ...dto, userId });
   }
 
   @Get('sessions')
-  async getSessions(
+  async listSessions(
     @CurrentUser() userId: string,
   ): Promise<ChatSessionDocument[]> {
-    return this.chatService.getSessions(userId);
-  }
-
-  @Delete('sessions/:sessionId')
-  @HttpCode(204)
-  async deleteSession(
-    @CurrentUser() userId: string,
-    @Param('sessionId', ParseMongoIdPipe) sessionId: string,
-  ): Promise<void> {
-    await this.chatService.deleteSession(userId, sessionId);
-  }
-
-  @Get('sessions/:sessionId/messages')
-  async getMessages(
-    @CurrentUser() userId: string,
-    @Param('sessionId', ParseMongoIdPipe) sessionId: string,
-    @Query() query: GetChatMessagesQueryDto,
-  ): Promise<ChatMessageDocument[]> {
-    return this.chatService.getSessionMessages(userId, sessionId, query);
+    return this.chatService.listSessions(userId);
   }
 
   @Post('sessions/:sessionId/messages')
-  async createMessage(
-    @CurrentUser() userId: string,
+  async sendMessage(
     @Param('sessionId', ParseMongoIdPipe) sessionId: string,
     @Body() dto: CreateChatMessageDto,
+  ): Promise<ChatMessageDocument> {
+    return this.chatService.sendMessage(sessionId, dto);
+  }
+
+  @Get('sessions/:sessionId/messages')
+  @HttpCode(200)
+  async listMessages(
+    @Param('sessionId', ParseMongoIdPipe) sessionId: string,
   ): Promise<ChatMessageDocument[]> {
-    return this.chatService.createMessage(userId, sessionId, dto);
+    return this.chatService.listMessages(sessionId);
   }
 }

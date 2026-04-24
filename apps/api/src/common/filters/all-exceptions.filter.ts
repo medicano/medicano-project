@@ -18,11 +18,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
-      const exceptionResponse = exception.getResponse();
+      const exceptionResponse = exception.getResponse() as
+        | string
+        | Record<string, unknown>;
       message =
         typeof exceptionResponse === 'string'
           ? exceptionResponse
-          : (exceptionResponse as any).message || message;
+          : ((exceptionResponse.message as string | undefined) ?? message);
     }
 
     response.status(status).json({

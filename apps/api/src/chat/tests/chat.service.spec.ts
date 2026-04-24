@@ -6,10 +6,19 @@ import { Types } from 'mongoose';
 
 import { ChatService } from '../chat.service';
 import { ChatSession } from '../schemas/chat-session.schema';
-import {
-  ChatMessage,
-  MessageRole,
-} from '../schemas/chat-message.schema';
+import { ChatMessage, MessageRole } from '../schemas/chat-message.schema';
+
+interface MockSessionModel {
+  create: jest.Mock;
+  findById: jest.Mock;
+  find: jest.Mock;
+  findByIdAndUpdate: jest.Mock;
+}
+
+interface MockMessageModel {
+  create: jest.Mock;
+  find: jest.Mock;
+}
 
 const mockAnthropicCreate = jest.fn();
 
@@ -23,14 +32,14 @@ jest.mock('@anthropic-ai/sdk', () => ({
 describe('ChatService', () => {
   let service: ChatService;
 
-  const mockSessionModel: any = {
+  const mockSessionModel: MockSessionModel = {
     create: jest.fn(),
     findById: jest.fn(),
     find: jest.fn(),
     findByIdAndUpdate: jest.fn(),
   };
 
-  const mockMessageModel: any = {
+  const mockMessageModel: MockMessageModel = {
     create: jest.fn(),
     find: jest.fn(),
   };
@@ -69,10 +78,11 @@ describe('ChatService', () => {
 
       mockSessionModel.create.mockResolvedValue(stubSession);
 
-      const result = await service.createSession({ userId } as any);
+      const result = await service.createSession({ userId });
 
       expect(mockSessionModel.create).toHaveBeenCalledTimes(1);
-      const arg = mockSessionModel.create.mock.calls[0][0];
+      type SessionArg = { userId: Types.ObjectId; clinicId?: Types.ObjectId };
+      const arg = (mockSessionModel.create.mock.calls as [SessionArg][])[0][0];
       expect(arg.userId.toString()).toBe(userId);
       expect(arg.clinicId).toBeUndefined();
       expect(result).toEqual(stubSession);
@@ -81,24 +91,18 @@ describe('ChatService', () => {
     it('creates a session with userId and clinicId', async () => {
       const userId = new Types.ObjectId().toHexString();
       const clinicId = new Types.ObjectId().toHexString();
-      const stubSession = {
-        _id: new Types.ObjectId(),
-        userId,
-        clinicId,
-      };
+      const stubSession = { _id: new Types.ObjectId(), userId, clinicId };
 
       mockSessionModel.create.mockResolvedValue(stubSession);
 
-      const result = await service.createSession({
-        userId,
-        clinicId,
-      } as any);
+      const result = await service.createSession({ userId, clinicId });
 
       expect(mockSessionModel.create).toHaveBeenCalledTimes(1);
-      const arg = mockSessionModel.create.mock.calls[0][0];
+      type SessionArg = { userId: Types.ObjectId; clinicId?: Types.ObjectId };
+      const arg = (mockSessionModel.create.mock.calls as [SessionArg][])[0][0];
       expect(arg.userId.toString()).toBe(userId);
       expect(arg.clinicId).toBeDefined();
-      expect(arg.clinicId.toString()).toBe(clinicId);
+      expect(arg.clinicId?.toString()).toBe(clinicId);
       expect(result).toEqual(stubSession);
     });
   });
@@ -117,7 +121,8 @@ describe('ChatService', () => {
       const result = await service.listSessions(userId);
 
       expect(mockSessionModel.find).toHaveBeenCalledTimes(1);
-      const findArg = mockSessionModel.find.mock.calls[0][0];
+      type FindArg = { userId: Types.ObjectId };
+      const findArg = (mockSessionModel.find.mock.calls as [FindArg][])[0][0];
       expect(findArg.userId.toString()).toBe(userId);
       expect(sortMock).toHaveBeenCalledWith({ updatedAt: -1 });
       expect(result).toEqual(sessions);
@@ -160,9 +165,7 @@ describe('ChatService', () => {
 
       mockSessionModel.findByIdAndUpdate.mockResolvedValue(session);
 
-      const result = await service.sendMessage(sessionId, {
-        content: 'Hello',
-      } as any);
+      const result = await service.sendMessage(sessionId, { content: 'Hello' });
 
       expect(mockSessionModel.findById).toHaveBeenCalledWith(sessionId);
       expect(mockMessageModel.create).toHaveBeenCalledTimes(2);
@@ -176,7 +179,7 @@ describe('ChatService', () => {
       mockSessionModel.findById.mockResolvedValue(null);
 
       await expect(
-        service.sendMessage(sessionId, { content: 'Hi' } as any),
+        service.sendMessage(sessionId, { content: 'Hi' }),
       ).rejects.toBeInstanceOf(NotFoundException);
 
       expect(mockMessageModel.create).not.toHaveBeenCalled();
@@ -185,9 +188,7 @@ describe('ChatService', () => {
 
     it('throws NotFoundException when sessionId is invalid', async () => {
       await expect(
-        service.sendMessage('not-an-object-id', {
-          content: 'Hi',
-        } as any),
+        service.sendMessage('not-an-object-id', { content: 'Hi' }),
       ).rejects.toBeInstanceOf(NotFoundException);
 
       expect(mockSessionModel.findById).not.toHaveBeenCalled();
@@ -222,7 +223,7 @@ describe('ChatService', () => {
       const sortMock = jest.fn().mockResolvedValue(messages);
       mockMessageModel.find.mockReturnValue({ sort: sortMock });
 
-      const result = await service.listMessages(sessionId, {} as any);
+      const result = await service.listMessages(sessionId);
 
       expect(mockSessionModel.findById).toHaveBeenCalledWith(sessionId);
       expect(mockMessageModel.find).toHaveBeenCalledTimes(1);
@@ -234,9 +235,9 @@ describe('ChatService', () => {
       const sessionId = new Types.ObjectId().toHexString();
       mockSessionModel.findById.mockResolvedValue(null);
 
-      await expect(
-        service.listMessages(sessionId, {} as any),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.listMessages(sessionId)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
 
       expect(mockMessageModel.find).not.toHaveBeenCalled();
     });

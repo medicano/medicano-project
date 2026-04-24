@@ -27,7 +27,9 @@ export class AuthController {
 
   @Post('login/attendant')
   @HttpCode(200)
-  async loginAttendant(@Body() loginDto: LoginAttendantDto): Promise<AuthTokens> {
+  async loginAttendant(
+    @Body() loginDto: LoginAttendantDto,
+  ): Promise<AuthTokens> {
     return this.authService.loginAttendant(loginDto);
   }
 

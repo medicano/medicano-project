@@ -12,7 +12,8 @@ export class ClinicProfessional {
   professionalId: Types.ObjectId;
 }
 
-export const ClinicProfessionalSchema = SchemaFactory.createForClass(ClinicProfessional);
+export const ClinicProfessionalSchema =
+  SchemaFactory.createForClass(ClinicProfessional);
 
 ClinicProfessionalSchema.index(
   { clinicId: 1, professionalId: 1 },

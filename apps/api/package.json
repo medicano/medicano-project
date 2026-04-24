@@ -7,19 +7,20 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "NODE_ENV=production nest build",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format": "prettier --write \"src/**/*.ts\"",
     "start:dev": "NODE_ENV=development nest start --watch",
-    "start:staging": "NODE_ENV=staging nest start --watch",
+    "start:stg": "NODE_ENV=staging nest start --watch",
     "start:debug": "NODE_ENV=development nest start --debug --watch",
-    "start:prod": "NODE_ENV=production node dist/main",
+    "start": "NODE_ENV=production node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "test": "NODE_ENV=test jest",
-    "test:watch": "NODE_ENV=test jest --watch",
-    "test:cov": "NODE_ENV=test jest --coverage",
-    "test:debug": "NODE_ENV=development node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "NODE_ENV=test jest --config ./test/jest-e2e.json"
+    "test": "NODE_ENV=test jest --detectOpenHandles",
+    "test:watch": "NODE_ENV=test jest --watch --detectOpenHandles",
+    "test:cov": "NODE_ENV=test jest --coverage --detectOpenHandles",
+    "test:debug": "NODE_ENV=development node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand --detectOpenHandles",
+    "test:e2e": "NODE_ENV=test jest --config ./test/jest-e2e.json --detectOpenHandles"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.91.0",
     "@aws-sdk/client-secrets-manager": "^3.1036.0",
     "@medicano/types": "*",
     "@nestjs/common": "^11.0.1",

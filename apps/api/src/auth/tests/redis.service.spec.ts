@@ -115,7 +115,9 @@ describe('RedisService', () => {
     it('should not throw if token does not exist', async () => {
       mockRedisClient.del.mockResolvedValue(0);
 
-      await expect(redisService.removeToken('nonexistent')).resolves.not.toThrow();
+      await expect(
+        redisService.removeToken('nonexistent'),
+      ).resolves.not.toThrow();
     });
   });
 });

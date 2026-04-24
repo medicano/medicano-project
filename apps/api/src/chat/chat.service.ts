@@ -1,10 +1,9 @@
-import {
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import Anthropic from '@anthropic-ai/sdk';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+
 import {
   ChatSession,
   ChatSessionDocument,
@@ -16,114 +15,105 @@ import {
 } from './schemas/chat-message.schema';
 import { CreateChatSessionDto } from './dto/create-chat-session.dto';
 import { CreateChatMessageDto } from './dto/create-chat-message.dto';
-import { GetChatMessagesQueryDto } from './dto/get-chat-messages-query.dto';
 
-const DEFAULT_MESSAGE_LIMIT = 20;
-const MAX_MESSAGE_LIMIT = 100;
+const MAX_CONTEXT_MESSAGES = 20;
+const LLM_MODEL = 'claude-sonnet-4-6';
+const MAX_RESPONSE_TOKENS = 1024;
+const SYSTEM_PROMPT =
+  'Você é um assistente de agendamento médico da plataforma Medicano. ' +
+  'Ajude os usuários a agendar, verificar e gerenciar consultas médicas de forma clara e eficiente.';
 
 @Injectable()
 export class ChatService {
+  private readonly anthropicClient: Anthropic;
+
   constructor(
     @InjectModel(ChatSession.name)
     private readonly sessionModel: Model<ChatSessionDocument>,
     @InjectModel(ChatMessage.name)
     private readonly messageModel: Model<ChatMessageDocument>,
-  ) {}
+    configService: ConfigService,
+  ) {
+    this.anthropicClient = new Anthropic({
+      apiKey: configService.get<string>('ANTHROPIC_API_KEY'),
+    });
+  }
 
   async createSession(
-    userId: string,
-    dto: CreateChatSessionDto,
+    dto: CreateChatSessionDto & { userId: string },
   ): Promise<ChatSessionDocument> {
-    const newSession = new this.sessionModel({
-      userId: new Types.ObjectId(userId),
+    return this.sessionModel.create({
+      userId: new Types.ObjectId(dto.userId),
       clinicId: dto.clinicId ? new Types.ObjectId(dto.clinicId) : undefined,
     });
-    return newSession.save();
   }
 
-  async getSessions(userId: string): Promise<ChatSessionDocument[]> {
+  async listSessions(userId: string): Promise<ChatSessionDocument[]> {
     return this.sessionModel
       .find({ userId: new Types.ObjectId(userId) })
-      .sort({ createdAt: -1 })
-      .exec();
+      .sort({ updatedAt: -1 });
   }
 
-  async deleteSession(userId: string, sessionId: string): Promise<void> {
-    const session = await this.assertSessionOwnership(userId, sessionId);
-    await this.messageModel.deleteMany({ sessionId: session._id }).exec();
-    await this.sessionModel.deleteOne({ _id: session._id }).exec();
-  }
-
-  async createMessage(
-    userId: string,
+  async sendMessage(
     sessionId: string,
     dto: CreateChatMessageDto,
-  ): Promise<ChatMessageDocument[]> {
-    const session = await this.assertSessionOwnership(userId, sessionId);
+  ): Promise<ChatMessageDocument> {
+    const session = await this.findSessionById(sessionId);
 
-    const userMessage = await new this.messageModel({
+    await this.messageModel.create({
       sessionId: session._id,
       role: MessageRole.USER,
       content: dto.content,
-    }).save();
+    });
 
-    const assistantReply = await this.generateAssistantReply(dto.content);
+    const allMessages = await this.messageModel
+      .find({ sessionId: session._id })
+      .sort({ createdAt: 1 });
+    const history = allMessages.slice(-MAX_CONTEXT_MESSAGES);
 
-    const assistantMessage = await new this.messageModel({
+    const response = await this.anthropicClient.messages.create({
+      model: LLM_MODEL,
+      max_tokens: MAX_RESPONSE_TOKENS,
+      system: SYSTEM_PROMPT,
+      messages: history.map((m) => ({
+        role: m.role,
+        content: m.content,
+      })),
+    });
+
+    const assistantText =
+      response.content[0].type === 'text' ? response.content[0].text : '';
+
+    const assistantMessage = await this.messageModel.create({
       sessionId: session._id,
       role: MessageRole.ASSISTANT,
-      content: assistantReply,
-    }).save();
+      content: assistantText,
+    });
 
-    return [userMessage, assistantMessage];
+    await this.sessionModel.findByIdAndUpdate(sessionId, {
+      updatedAt: new Date(),
+    });
+
+    return assistantMessage;
   }
 
-  async getSessionMessages(
-    userId: string,
-    sessionId: string,
-    query: GetChatMessagesQueryDto,
-  ): Promise<ChatMessageDocument[]> {
-    const session = await this.assertSessionOwnership(userId, sessionId);
-
-    const limit = Math.min(
-      query.limit ?? DEFAULT_MESSAGE_LIMIT,
-      MAX_MESSAGE_LIMIT,
-    );
-
-    const filter: Record<string, unknown> = { sessionId: session._id };
-    if (query.cursor) {
-      if (!Types.ObjectId.isValid(query.cursor)) {
-        throw new NotFoundException(`Invalid cursor: ${query.cursor}`);
-      }
-      filter._id = { $gt: new Types.ObjectId(query.cursor) };
-    }
-
+  async listMessages(sessionId: string): Promise<ChatMessageDocument[]> {
+    const session = await this.findSessionById(sessionId);
     return this.messageModel
-      .find(filter)
-      .sort({ createdAt: 1 })
-      .limit(limit)
-      .exec();
+      .find({ sessionId: session._id })
+      .sort({ createdAt: 1 });
   }
 
-  private async assertSessionOwnership(
-    userId: string,
+  private async findSessionById(
     sessionId: string,
   ): Promise<ChatSessionDocument> {
     if (!Types.ObjectId.isValid(sessionId)) {
       throw new NotFoundException(`Invalid session ID: ${sessionId}`);
     }
-    const session = await this.sessionModel.findById(sessionId).exec();
+    const session = await this.sessionModel.findById(sessionId);
     if (!session) {
       throw new NotFoundException(`Chat session ${sessionId} not found`);
     }
-    if (session.userId.toString() !== userId) {
-      throw new ForbiddenException('Access denied to this chat session');
-    }
     return session;
-  }
-
-  private async generateAssistantReply(userContent: string): Promise<string> {
-    // Placeholder reply until LLMService is wired in.
-    return `Received: ${userContent}`;
   }
 }

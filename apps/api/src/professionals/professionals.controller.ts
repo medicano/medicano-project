@@ -24,7 +24,9 @@ export class ProfessionalsController {
 
   @Post()
   @Roles(Role.CLINIC)
-  async create(@Body() createProfessionalDto: CreateProfessionalDto): Promise<ProfessionalDocument> {
+  async create(
+    @Body() createProfessionalDto: CreateProfessionalDto,
+  ): Promise<ProfessionalDocument> {
     return this.professionalsService.create(createProfessionalDto);
   }
 

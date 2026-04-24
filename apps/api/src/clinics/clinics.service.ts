@@ -32,7 +32,10 @@ export class ClinicsService {
     return clinic;
   }
 
-  async update(id: string, updateClinicDto: UpdateClinicDto): Promise<ClinicDocument> {
+  async update(
+    id: string,
+    updateClinicDto: UpdateClinicDto,
+  ): Promise<ClinicDocument> {
     if (!Types.ObjectId.isValid(id)) {
       throw new NotFoundException(`Invalid clinic ID: ${id}`);
     }

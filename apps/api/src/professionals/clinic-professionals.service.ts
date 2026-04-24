@@ -1,10 +1,22 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { ClinicProfessional, ClinicProfessionalDocument } from './schemas/clinic-professional.schema';
-import { Professional, ProfessionalDocument } from './schemas/professional.schema';
+import {
+  ClinicProfessional,
+  ClinicProfessionalDocument,
+} from './schemas/clinic-professional.schema';
+import {
+  Professional,
+  ProfessionalDocument,
+} from './schemas/professional.schema';
 import { ClinicsService } from '../clinics/clinics.service';
 import { ProfessionalsService } from './professionals.service';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 @Injectable()
 export class ClinicProfessionalsService {
@@ -15,6 +27,7 @@ export class ClinicProfessionalsService {
     private professionalModel: Model<ProfessionalDocument>,
     private clinicsService: ClinicsService,
     private professionalsService: ProfessionalsService,
+    private subscriptionsService: SubscriptionsService,
   ) {}
 
   async assignProfessionalToClinic(
@@ -26,11 +39,21 @@ export class ClinicProfessionalsService {
     }
 
     if (!Types.ObjectId.isValid(professionalId)) {
-      throw new BadRequestException(`Invalid professional ID: ${professionalId}`);
+      throw new BadRequestException(
+        `Invalid professional ID: ${professionalId}`,
+      );
     }
 
     await this.clinicsService.findById(clinicId);
     await this.professionalsService.findById(professionalId);
+
+    const currentCount = await this.clinicProfessionalModel.countDocuments({
+      clinicId: new Types.ObjectId(clinicId),
+    });
+    await this.subscriptionsService.enforceClinicProfessionalLimit(
+      clinicId,
+      currentCount,
+    );
 
     try {
       const assignment = new this.clinicProfessionalModel({
@@ -38,8 +61,8 @@ export class ClinicProfessionalsService {
         professionalId: new Types.ObjectId(professionalId),
       });
       return await assignment.save();
-    } catch (error: any) {
-      if (error.code === 11000) {
+    } catch (error: unknown) {
+      if ((error as { code?: number }).code === 11000) {
         throw new ConflictException(
           `Professional ${professionalId} is already assigned to clinic ${clinicId}`,
         );
@@ -48,7 +71,9 @@ export class ClinicProfessionalsService {
     }
   }
 
-  async getProfessionalsByClinic(clinicId: string): Promise<ProfessionalDocument[]> {
+  async getProfessionalsByClinic(
+    clinicId: string,
+  ): Promise<ProfessionalDocument[]> {
     if (!Types.ObjectId.isValid(clinicId)) {
       throw new BadRequestException(`Invalid clinic ID: ${clinicId}`);
     }
@@ -76,7 +101,9 @@ export class ClinicProfessionalsService {
     }
 
     if (!Types.ObjectId.isValid(professionalId)) {
-      throw new BadRequestException(`Invalid professional ID: ${professionalId}`);
+      throw new BadRequestException(
+        `Invalid professional ID: ${professionalId}`,
+      );
     }
 
     const result = await this.clinicProfessionalModel

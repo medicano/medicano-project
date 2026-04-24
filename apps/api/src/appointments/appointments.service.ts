@@ -44,11 +44,14 @@ export class AppointmentsService {
     return appointment.save();
   }
 
-  async findAll(query: GetAppointmentsQueryDto): Promise<AppointmentDocument[]> {
+  async findAll(
+    query: GetAppointmentsQueryDto,
+  ): Promise<AppointmentDocument[]> {
     const filter: Record<string, unknown> = {};
 
     if (query.clinicId) filter.clinicId = new Types.ObjectId(query.clinicId);
-    if (query.professionalId) filter.professionalId = new Types.ObjectId(query.professionalId);
+    if (query.professionalId)
+      filter.professionalId = new Types.ObjectId(query.professionalId);
     if (query.patientId) filter.patientId = new Types.ObjectId(query.patientId);
     if (query.status) filter.status = query.status;
 
@@ -77,7 +80,10 @@ export class AppointmentsService {
     return appointment;
   }
 
-  async update(id: string, dto: UpdateAppointmentDto): Promise<AppointmentDocument> {
+  async update(
+    id: string,
+    dto: UpdateAppointmentDto,
+  ): Promise<AppointmentDocument> {
     const existing = await this.findById(id);
 
     if (dto.startAt !== undefined || dto.durationMinutes !== undefined) {
@@ -85,7 +91,12 @@ export class AppointmentsService {
       const durationMinutes = dto.durationMinutes ?? existing.durationMinutes;
       const endAt = new Date(startAt.getTime() + durationMinutes * 60 * 1000);
 
-      await this.checkConflict(existing.professionalId.toString(), startAt, endAt, id);
+      await this.checkConflict(
+        existing.professionalId.toString(),
+        startAt,
+        endAt,
+        id,
+      );
     }
 
     const updateData: Partial<Appointment> & { endAt?: Date } = {};
@@ -93,12 +104,17 @@ export class AppointmentsService {
     if (dto.startAt !== undefined) {
       updateData.startAt = new Date(dto.startAt);
       const durationMinutes = dto.durationMinutes ?? existing.durationMinutes;
-      updateData.endAt = new Date(updateData.startAt.getTime() + durationMinutes * 60 * 1000);
+      updateData.endAt = new Date(
+        updateData.startAt.getTime() + durationMinutes * 60 * 1000,
+      );
     } else if (dto.durationMinutes !== undefined) {
-      updateData.endAt = new Date(existing.startAt.getTime() + dto.durationMinutes * 60 * 1000);
+      updateData.endAt = new Date(
+        existing.startAt.getTime() + dto.durationMinutes * 60 * 1000,
+      );
     }
 
-    if (dto.durationMinutes !== undefined) updateData.durationMinutes = dto.durationMinutes;
+    if (dto.durationMinutes !== undefined)
+      updateData.durationMinutes = dto.durationMinutes;
     if (dto.notes !== undefined) updateData.notes = dto.notes;
 
     const updated = await this.appointmentModel

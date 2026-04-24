@@ -1,8 +1,15 @@
-import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+import {
+  SecretsManagerClient,
+  GetSecretValueCommand,
+} from '@aws-sdk/client-secrets-manager';
 
 type Environment = 'development' | 'staging' | 'production' | 'test';
 
-const AWS_ENVIRONMENTS: Environment[] = ['development', 'staging', 'production'];
+const AWS_ENVIRONMENTS: Environment[] = [
+  'development',
+  'staging',
+  'production',
+];
 const VALID_ENVIRONMENTS: Environment[] = [...AWS_ENVIRONMENTS, 'test'];
 
 function resolveSecretName(): string {
@@ -22,6 +29,7 @@ export async function loadAwsSecrets(): Promise<Record<string, string>> {
       REDIS_HOST: 'localhost',
       REDIS_PORT: '6379',
       JWT_SECRET: 'test-secret',
+      ANTHROPIC_API_KEY: 'test-anthropic-key',
     };
   }
 
@@ -31,10 +39,14 @@ export async function loadAwsSecrets(): Promise<Record<string, string>> {
     region: process.env.AWS_REGION ?? 'us-east-2',
   });
 
-  const response = await client.send(new GetSecretValueCommand({ SecretId: secretName }));
+  const response = await client.send(
+    new GetSecretValueCommand({ SecretId: secretName }),
+  );
 
   if (!response.SecretString) {
-    throw new Error(`AWS secret "${secretName}" is empty or binary — only JSON string secrets are supported`);
+    throw new Error(
+      `AWS secret "${secretName}" is empty or binary — only JSON string secrets are supported`,
+    );
   }
 
   return JSON.parse(response.SecretString) as Record<string, string>;

@@ -1,6 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Types } from 'mongoose';
 import { AppointmentsService } from '../appointments.service';
 import { Appointment, AppointmentStatus } from '../schemas/appointment.schema';
@@ -31,7 +35,10 @@ describe('AppointmentsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AppointmentsService,
-        { provide: getModelToken(Appointment.name), useValue: MockAppointmentModel },
+        {
+          provide: getModelToken(Appointment.name),
+          useValue: MockAppointmentModel,
+        },
       ],
     }).compile();
 
@@ -52,7 +59,7 @@ describe('AppointmentsService', () => {
     };
 
     it('should create appointment and compute endAt correctly', async () => {
-      (MockAppointmentModel.findOne as jest.Mock).mockReturnValue({
+      MockAppointmentModel.findOne.mockReturnValue({
         exec: jest.fn().mockResolvedValue(null),
       });
 
@@ -67,7 +74,7 @@ describe('AppointmentsService', () => {
     });
 
     it('should throw ConflictException when professional has overlapping appointment', async () => {
-      (MockAppointmentModel.findOne as jest.Mock).mockReturnValue({
+      MockAppointmentModel.findOne.mockReturnValue({
         exec: jest.fn().mockResolvedValue({ _id: 'existing-id' }),
       });
 
@@ -82,8 +89,10 @@ describe('AppointmentsService', () => {
   describe('findAll', () => {
     it('should return all appointments when no filters provided', async () => {
       const appointments = [{ status: AppointmentStatus.SCHEDULED }];
-      (MockAppointmentModel.find as jest.Mock).mockReturnValue({
-        sort: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(appointments) }),
+      MockAppointmentModel.find.mockReturnValue({
+        sort: jest
+          .fn()
+          .mockReturnValue({ exec: jest.fn().mockResolvedValue(appointments) }),
       });
 
       const result = await appointmentsService.findAll({});
@@ -94,26 +103,34 @@ describe('AppointmentsService', () => {
 
     it('should filter appointments by clinicId', async () => {
       const appointments = [{ clinicId: new Types.ObjectId(clinicId) }];
-      (MockAppointmentModel.find as jest.Mock).mockReturnValue({
-        sort: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(appointments) }),
+      MockAppointmentModel.find.mockReturnValue({
+        sort: jest
+          .fn()
+          .mockReturnValue({ exec: jest.fn().mockResolvedValue(appointments) }),
       });
 
       const result = await appointmentsService.findAll({ clinicId });
 
       expect(result).toEqual(appointments);
-      const [[filterArg]] = (MockAppointmentModel.find as jest.Mock).mock.calls;
+      const [[filterArg]] = MockAppointmentModel.find.mock.calls as [
+        [{ clinicId: Types.ObjectId }],
+      ];
       expect(filterArg.clinicId.toString()).toBe(clinicId);
     });
 
     it('should filter appointments by date returning only that calendar day', async () => {
       const appointments = [{ startAt: new Date('2026-05-01T10:00:00Z') }];
-      (MockAppointmentModel.find as jest.Mock).mockReturnValue({
-        sort: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(appointments) }),
+      MockAppointmentModel.find.mockReturnValue({
+        sort: jest
+          .fn()
+          .mockReturnValue({ exec: jest.fn().mockResolvedValue(appointments) }),
       });
 
       await appointmentsService.findAll({ date: '2026-05-01' });
 
-      const [[filterArg]] = (MockAppointmentModel.find as jest.Mock).mock.calls;
+      const [[filterArg]] = MockAppointmentModel.find.mock.calls as [
+        [{ startAt: unknown }],
+      ];
       expect(filterArg.startAt).toEqual({
         $gte: new Date('2026-05-01T00:00:00.000Z'),
         $lt: new Date('2026-05-02T00:00:00.000Z'),
@@ -125,8 +142,11 @@ describe('AppointmentsService', () => {
 
   describe('findById', () => {
     it('should return the appointment when found', async () => {
-      const appointment = { _id: appointmentId, status: AppointmentStatus.SCHEDULED };
-      (MockAppointmentModel.findById as jest.Mock).mockReturnValue({
+      const appointment = {
+        _id: appointmentId,
+        status: AppointmentStatus.SCHEDULED,
+      };
+      MockAppointmentModel.findById.mockReturnValue({
         exec: jest.fn().mockResolvedValue(appointment),
       });
 
@@ -142,7 +162,7 @@ describe('AppointmentsService', () => {
     });
 
     it('should throw NotFoundException when appointment does not exist', async () => {
-      (MockAppointmentModel.findById as jest.Mock).mockReturnValue({
+      MockAppointmentModel.findById.mockReturnValue({
         exec: jest.fn().mockResolvedValue(null),
       });
 
@@ -170,22 +190,26 @@ describe('AppointmentsService', () => {
         endAt: new Date(new Date(newStartAt).getTime() + 60 * 60 * 1000),
       };
 
-      (MockAppointmentModel.findById as jest.Mock).mockReturnValue({
+      MockAppointmentModel.findById.mockReturnValue({
         exec: jest.fn().mockResolvedValue(existing),
       });
-      (MockAppointmentModel.findOne as jest.Mock).mockReturnValue({
+      MockAppointmentModel.findOne.mockReturnValue({
         exec: jest.fn().mockResolvedValue(null),
       });
-      (MockAppointmentModel.findByIdAndUpdate as jest.Mock).mockReturnValue({
+      MockAppointmentModel.findByIdAndUpdate.mockReturnValue({
         exec: jest.fn().mockResolvedValue(updated),
       });
 
-      const result = await appointmentsService.update(appointmentId, { startAt: newStartAt });
+      const result = await appointmentsService.update(appointmentId, {
+        startAt: newStartAt,
+      });
 
       expect(result.startAt).toEqual(new Date(newStartAt));
       // conflict check ran and excluded the appointment being updated
       expect(MockAppointmentModel.findOne).toHaveBeenCalledTimes(1);
-      const [[conflictFilter]] = (MockAppointmentModel.findOne as jest.Mock).mock.calls;
+      const [[conflictFilter]] = MockAppointmentModel.findOne.mock.calls as [
+        [{ _id: unknown }],
+      ];
       expect(conflictFilter._id).toEqual({ $ne: appointmentId });
     });
   });
@@ -194,13 +218,16 @@ describe('AppointmentsService', () => {
 
   describe('updateStatus', () => {
     it('should transition status from SCHEDULED to CONFIRMED', async () => {
-      const appointment = { _id: appointmentId, status: AppointmentStatus.SCHEDULED };
+      const appointment = {
+        _id: appointmentId,
+        status: AppointmentStatus.SCHEDULED,
+      };
       const updated = { ...appointment, status: AppointmentStatus.CONFIRMED };
 
-      (MockAppointmentModel.findById as jest.Mock).mockReturnValue({
+      MockAppointmentModel.findById.mockReturnValue({
         exec: jest.fn().mockResolvedValue(appointment),
       });
-      (MockAppointmentModel.findByIdAndUpdate as jest.Mock).mockReturnValue({
+      MockAppointmentModel.findByIdAndUpdate.mockReturnValue({
         exec: jest.fn().mockResolvedValue(updated),
       });
 
@@ -217,9 +244,12 @@ describe('AppointmentsService', () => {
     });
 
     it('should throw BadRequestException for invalid transition (COMPLETED → SCHEDULED)', async () => {
-      const appointment = { _id: appointmentId, status: AppointmentStatus.COMPLETED };
+      const appointment = {
+        _id: appointmentId,
+        status: AppointmentStatus.COMPLETED,
+      };
 
-      (MockAppointmentModel.findById as jest.Mock).mockReturnValue({
+      MockAppointmentModel.findById.mockReturnValue({
         exec: jest.fn().mockResolvedValue(appointment),
       });
 
@@ -235,13 +265,16 @@ describe('AppointmentsService', () => {
 
   describe('cancel', () => {
     it('should set status to CANCELLED and return { success: true }', async () => {
-      const appointment = { _id: appointmentId, status: AppointmentStatus.SCHEDULED };
+      const appointment = {
+        _id: appointmentId,
+        status: AppointmentStatus.SCHEDULED,
+      };
       const cancelled = { ...appointment, status: AppointmentStatus.CANCELLED };
 
-      (MockAppointmentModel.findById as jest.Mock).mockReturnValue({
+      MockAppointmentModel.findById.mockReturnValue({
         exec: jest.fn().mockResolvedValue(appointment),
       });
-      (MockAppointmentModel.findByIdAndUpdate as jest.Mock).mockReturnValue({
+      MockAppointmentModel.findByIdAndUpdate.mockReturnValue({
         exec: jest.fn().mockResolvedValue(cancelled),
       });
 

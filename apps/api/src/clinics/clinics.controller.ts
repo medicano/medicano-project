@@ -24,7 +24,9 @@ export class ClinicsController {
 
   @Post()
   @Roles(Role.CLINIC)
-  async create(@Body() createClinicDto: CreateClinicDto): Promise<ClinicDocument> {
+  async create(
+    @Body() createClinicDto: CreateClinicDto,
+  ): Promise<ClinicDocument> {
     return this.clinicsService.create(createClinicDto);
   }
 

@@ -39,5 +39,3 @@ export class Subscription {
 
 export type SubscriptionDocument = Subscription & Document;
 export const SubscriptionSchema = SchemaFactory.createForClass(Subscription);
-
-SubscriptionSchema.index({ clinicId: 1 }, { unique: true });

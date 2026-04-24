@@ -12,6 +12,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
 import { ClinicProfessionalDocument } from './schemas/clinic-professional.schema';
+import { ProfessionalDocument } from './schemas/professional.schema';
 
 @Controller('clinics')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -35,8 +36,8 @@ export class ClinicProfessionalsController {
   @Get(':clinicId/professionals')
   async getProfessionals(
     @Param('clinicId') clinicId: string,
-  ): Promise<ClinicProfessionalDocument[]> {
-    return this.clinicProfessionalsService.findProfessionalsByClinic(clinicId);
+  ): Promise<ProfessionalDocument[]> {
+    return this.clinicProfessionalsService.getProfessionalsByClinic(clinicId);
   }
 
   @Delete(':clinicId/professionals/:professionalId')
@@ -44,7 +45,7 @@ export class ClinicProfessionalsController {
   async removeProfessional(
     @Param('clinicId') clinicId: string,
     @Param('professionalId') professionalId: string,
-  ): Promise<ClinicProfessionalDocument> {
+  ): Promise<{ success: boolean }> {
     return this.clinicProfessionalsService.removeProfessionalFromClinic(
       clinicId,
       professionalId,

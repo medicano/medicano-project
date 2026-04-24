@@ -8,9 +8,18 @@ export enum AppointmentStatus {
   CANCELLED = 'cancelled',
 }
 
-export const VALID_STATUS_TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]> = {
-  [AppointmentStatus.SCHEDULED]: [AppointmentStatus.CONFIRMED, AppointmentStatus.CANCELLED],
-  [AppointmentStatus.CONFIRMED]: [AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED],
+export const VALID_STATUS_TRANSITIONS: Record<
+  AppointmentStatus,
+  AppointmentStatus[]
+> = {
+  [AppointmentStatus.SCHEDULED]: [
+    AppointmentStatus.CONFIRMED,
+    AppointmentStatus.CANCELLED,
+  ],
+  [AppointmentStatus.CONFIRMED]: [
+    AppointmentStatus.COMPLETED,
+    AppointmentStatus.CANCELLED,
+  ],
   [AppointmentStatus.COMPLETED]: [],
   [AppointmentStatus.CANCELLED]: [],
 };
@@ -35,7 +44,11 @@ export class Appointment {
   @Prop({ type: Number, required: true, min: 15, max: 480 })
   durationMinutes: number;
 
-  @Prop({ type: String, enum: AppointmentStatus, default: AppointmentStatus.SCHEDULED })
+  @Prop({
+    type: String,
+    enum: AppointmentStatus,
+    default: AppointmentStatus.SCHEDULED,
+  })
   status: AppointmentStatus;
 
   @Prop({ type: String })

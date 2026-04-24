@@ -58,8 +58,8 @@ export class SubscriptionsService {
         clinicId: new Types.ObjectId(dto.clinicId),
         expiresAt: new Date(dto.expiresAt),
       });
-    } catch (error: any) {
-      if (error?.code === 11000) {
+    } catch (error: unknown) {
+      if ((error as { code?: number }).code === 11000) {
         throw new ConflictException(
           'Subscription already exists for this clinic',
         );
@@ -68,9 +68,7 @@ export class SubscriptionsService {
     }
   }
 
-  async findByClinicId(
-    clinicId: string,
-  ): Promise<SubscriptionDocument | null> {
+  async findByClinicId(clinicId: string): Promise<SubscriptionDocument | null> {
     if (!Types.ObjectId.isValid(clinicId)) {
       return null;
     }

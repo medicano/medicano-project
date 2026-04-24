@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { getConnectionToken } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
+import * as http from 'http';
 import request from 'supertest';
 import { AppModule } from '../../app.module';
 import { Role } from '../../common/enums/role.enum';
@@ -9,6 +10,7 @@ import { loadAwsSecrets } from '../../common/config/aws-secrets.loader';
 
 describe('Auth E2E Tests', () => {
   let app: INestApplication;
+  let server: http.Server;
   let mongoConnection: Connection;
 
   const testUser = {
@@ -35,6 +37,7 @@ describe('Auth E2E Tests', () => {
     );
 
     await app.init();
+    server = app.getHttpServer() as http.Server;
 
     mongoConnection = moduleFixture.get<Connection>(getConnectionToken());
     await mongoConnection.collection('users').deleteMany({
@@ -51,24 +54,22 @@ describe('Auth E2E Tests', () => {
 
   describe('POST /auth/signup', () => {
     it('should create a new user and return access token', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(server)
         .post('/auth/signup')
         .send(testUser)
         .expect(201);
 
-      expect(response.body).toHaveProperty('accessToken');
-      expect(typeof response.body.accessToken).toBe('string');
+      const body = response.body as { accessToken: string };
+      expect(body).toHaveProperty('accessToken');
+      expect(typeof body.accessToken).toBe('string');
     });
 
     it('should return 409 if user already exists', async () => {
-      await request(app.getHttpServer())
-        .post('/auth/signup')
-        .send(testUser)
-        .expect(409);
+      await request(server).post('/auth/signup').send(testUser).expect(409);
     });
 
     it('should return 400 for invalid payload', async () => {
-      await request(app.getHttpServer())
+      await request(server)
         .post('/auth/signup')
         .send({ email: 'invalid' })
         .expect(400);
@@ -77,7 +78,7 @@ describe('Auth E2E Tests', () => {
 
   describe('POST /auth/login', () => {
     it('should login with valid credentials and return access token', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(server)
         .post('/auth/login')
         .send({ email: testUser.email, password: testUser.password })
         .expect(200);
@@ -86,14 +87,14 @@ describe('Auth E2E Tests', () => {
     });
 
     it('should return 401 for wrong password', async () => {
-      await request(app.getHttpServer())
+      await request(server)
         .post('/auth/login')
         .send({ email: testUser.email, password: 'wrongpassword' })
         .expect(401);
     });
 
     it('should return 401 for non-existent user', async () => {
-      await request(app.getHttpServer())
+      await request(server)
         .post('/auth/login')
         .send({ email: 'none@none.com', password: 'password123' })
         .expect(401);
@@ -102,20 +103,20 @@ describe('Auth E2E Tests', () => {
 
   describe('POST /auth/logout', () => {
     it('should logout and return 204', async () => {
-      const loginResponse = await request(app.getHttpServer())
+      const loginResponse = await request(server)
         .post('/auth/login')
         .send({ email: testUser.email, password: testUser.password });
 
-      const token = loginResponse.body.accessToken;
+      const token = (loginResponse.body as { accessToken: string }).accessToken;
 
-      await request(app.getHttpServer())
+      await request(server)
         .post('/auth/logout')
         .set('Authorization', `Bearer ${token}`)
         .expect(204);
     });
 
     it('should return 401 without token', async () => {
-      await request(app.getHttpServer()).post('/auth/logout').expect(401);
+      await request(server).post('/auth/logout').expect(401);
     });
   });
 
@@ -128,30 +129,32 @@ describe('Auth E2E Tests', () => {
 
     it('should complete the full auth cycle and reject after logout', async () => {
       // 1. Signup
-      const signupRes = await request(app.getHttpServer())
+      const signupRes = await request(server)
         .post('/auth/signup')
         .send(flowUser)
         .expect(201);
 
-      expect(signupRes.body.accessToken).toBeDefined();
+      expect(
+        (signupRes.body as { accessToken?: string }).accessToken,
+      ).toBeDefined();
 
       // 2. Login
-      const loginRes = await request(app.getHttpServer())
+      const loginRes = await request(server)
         .post('/auth/login')
         .send({ email: flowUser.email, password: flowUser.password })
         .expect(200);
 
-      const token = loginRes.body.accessToken;
+      const token = (loginRes.body as { accessToken: string }).accessToken;
       expect(token).toBeDefined();
 
       // 3. Logout
-      await request(app.getHttpServer())
+      await request(server)
         .post('/auth/logout')
         .set('Authorization', `Bearer ${token}`)
         .expect(204);
 
       // 4. Same token must now be rejected
-      await request(app.getHttpServer())
+      await request(server)
         .post('/auth/logout')
         .set('Authorization', `Bearer ${token}`)
         .expect(401);

@@ -2,7 +2,10 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ProfessionalsController } from './professionals.controller';
 import { ProfessionalsService } from './professionals.service';
-import { Professional, ProfessionalSchema } from './schemas/professional.schema';
+import {
+  Professional,
+  ProfessionalSchema,
+} from './schemas/professional.schema';
 
 @Module({
   imports: [

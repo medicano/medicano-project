@@ -1,7 +1,17 @@
 from typing import List
-from crewai import Agent, Crew, Process, Task
+from crewai import Agent, Crew, LLM, Process, Task
 from crewai.agents.agent_builder.base_agent import BaseAgent
 from crewai.project import CrewBase, agent, crew, task
+
+_gemini_llm = LLM(
+    model="openrouter/google/gemini-2.5-pro",
+    extra_body={
+        "provider": {
+            "order": ["Google AI Studio"],
+            "allow_fallbacks": False,
+        }
+    },
+)
 
 
 @CrewBase
@@ -36,6 +46,7 @@ class DevCrew:
     def documenter(self) -> Agent:
         return Agent(
             config=self.agents_config["documenter"],  # type: ignore[index]
+            llm=_gemini_llm,
             verbose=True,
         )
 

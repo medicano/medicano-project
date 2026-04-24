@@ -92,7 +92,9 @@ describe('AuthService', () => {
         new ConflictException('User already exists'),
       );
 
-      await expect(authService.signup(signupDto)).rejects.toThrow(ConflictException);
+      await expect(authService.signup(signupDto)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -153,7 +155,9 @@ describe('AuthService', () => {
     };
 
     it('should return accessToken for valid attendant credentials', async () => {
-      mockUsersService.findByClinicIdAndUsername.mockResolvedValue(attendantUser);
+      mockUsersService.findByClinicIdAndUsername.mockResolvedValue(
+        attendantUser,
+      );
       mockUsersService.comparePassword.mockResolvedValue(true);
       mockJwtService.sign.mockReturnValue('jwt.attendant.token');
       mockRedisService.saveToken.mockResolvedValue(undefined);
@@ -180,7 +184,9 @@ describe('AuthService', () => {
     });
 
     it('should throw UnauthorizedException if password is incorrect', async () => {
-      mockUsersService.findByClinicIdAndUsername.mockResolvedValue(attendantUser);
+      mockUsersService.findByClinicIdAndUsername.mockResolvedValue(
+        attendantUser,
+      );
       mockUsersService.comparePassword.mockResolvedValue(false);
 
       await expect(authService.loginAttendant(loginDto)).rejects.toThrow(

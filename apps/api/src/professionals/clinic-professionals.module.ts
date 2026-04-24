@@ -2,10 +2,17 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ClinicProfessionalsController } from './clinic-professionals.controller';
 import { ClinicProfessionalsService } from './clinic-professionals.service';
-import { ClinicProfessional, ClinicProfessionalSchema } from './schemas/clinic-professional.schema';
-import { Professional, ProfessionalSchema } from './schemas/professional.schema';
+import {
+  ClinicProfessional,
+  ClinicProfessionalSchema,
+} from './schemas/clinic-professional.schema';
+import {
+  Professional,
+  ProfessionalSchema,
+} from './schemas/professional.schema';
 import { ClinicsModule } from '../clinics/clinics.module';
 import { ProfessionalsModule } from './professionals.module';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 
 @Module({
   imports: [
@@ -15,6 +22,7 @@ import { ProfessionalsModule } from './professionals.module';
     ]),
     ClinicsModule,
     ProfessionalsModule,
+    SubscriptionsModule,
   ],
   controllers: [ClinicProfessionalsController],
   providers: [ClinicProfessionalsService],

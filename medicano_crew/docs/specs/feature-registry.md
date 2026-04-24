@@ -627,9 +627,116 @@ export class AppointmentsModule
 
 ---
 
+## Subscriptions — `apps/api/src/subscriptions`
+
+### `subscriptions/schemas/subscription.schema.ts` ✅
+```typescript
+export enum SubscriptionPlan {
+  FREE = 'free',
+  BASIC = 'basic',
+  PRO = 'pro',
+}
+
+export const PLAN_PROFESSIONAL_LIMITS: Record<SubscriptionPlan, number> = {
+  [SubscriptionPlan.FREE]: 2,
+  [SubscriptionPlan.BASIC]: 10,
+  [SubscriptionPlan.PRO]: -1,   // -1 = unlimited
+}
+
+@Schema({ timestamps: true })
+export class Subscription
+  clinicId: Types.ObjectId   // ref: 'Clinic', required, unique
+  plan: SubscriptionPlan     // default: FREE
+  status: SubscriptionStatus // imported from clinics/schemas/clinic.schema; default: TRIAL
+  expiresAt: Date            // required
+
+export type SubscriptionDocument = Subscription & Document
+export const SubscriptionSchema = SchemaFactory.createForClass(Subscription)
+```
+
+### `subscriptions/constants/subscription.constants.ts` ✅
+Re-exports `SubscriptionPlan`, `PLAN_PROFESSIONAL_LIMITS` from the schema and `SubscriptionStatus` from clinics schema.
+
+### `subscriptions/dto/create-subscription.dto.ts` ✅
+```typescript
+export class CreateSubscriptionDto
+  clinicId: string          // @IsMongoId @IsNotEmpty
+  plan?: SubscriptionPlan   // @IsEnum @IsOptional
+  expiresAt: string         // @IsDateString
+```
+
+### `subscriptions/dto/update-subscription.dto.ts` ✅
+```typescript
+export class UpdateSubscriptionDto
+  plan?: SubscriptionPlan      // @IsEnum @IsOptional
+  status?: SubscriptionStatus  // @IsEnum @IsOptional
+  expiresAt?: string           // @IsDateString @IsOptional
+```
+
+### `subscriptions/subscriptions.service.ts` ✅
+```typescript
+@Injectable()
+export class SubscriptionsService
+  create(dto: CreateSubscriptionDto): Promise<SubscriptionDocument>
+    // validates clinicId ObjectId; calls clinicsService.findById; catches 11000 → ConflictException
+  findByClinicId(clinicId: string): Promise<SubscriptionDocument | null>
+    // returns null if invalid ObjectId or not found — absence is valid
+  findById(id: string): Promise<SubscriptionDocument>
+    // validates ObjectId, throws NotFoundException if not found
+  update(id: string, dto: UpdateSubscriptionDto): Promise<SubscriptionDocument>
+    // validates status transitions; findByIdAndUpdate({ new: true })
+  cancel(id: string): Promise<SubscriptionDocument>
+    // sets status to INACTIVE
+  enforceClinicProfessionalLimit(clinicId: string, currentCount: number): Promise<void>
+    // finds subscription (defaults to FREE if none); throws ForbiddenException if limit reached
+    // PRO plan (limit === -1) never blocks
+```
+
+### `subscriptions/subscriptions.controller.ts` ✅
+```typescript
+@Controller('subscriptions') @UseGuards(JwtAuthGuard, RolesGuard)
+export class SubscriptionsController
+  POST  /subscriptions                @Roles(CLINIC)  → create()
+  GET   /subscriptions/clinic/:clinicId               → findByClinicId()
+  GET   /subscriptions/:id                            → findById()
+  PUT   /subscriptions/:id            @Roles(CLINIC)  → update()
+  POST  /subscriptions/:id/cancel     @Roles(CLINIC) @HttpCode(200) → cancel()
+// Note: GET /clinic/:clinicId is declared BEFORE GET /:id to avoid routing conflicts
+```
+
+### `subscriptions/subscriptions.module.ts` ✅
+```typescript
+@Module({
+  imports: [MongooseModule.forFeature([Subscription]), ClinicsModule],
+  controllers: [SubscriptionsController],
+  providers: [SubscriptionsService],
+  exports: [SubscriptionsService],
+})
+export class SubscriptionsModule
+```
+
+### `subscriptions/tests/subscriptions.service.spec.ts` ✅
+18 tests, all pass:
+- create: success, duplicate (ConflictException), clinic not found (NotFoundException)
+- findByClinicId: found, not found (null), invalid ObjectId (null)
+- findById: found, not found, invalid ObjectId
+- update: updates plan and status
+- cancel: sets status to INACTIVE
+- enforceClinicProfessionalLimit: under limit, at limit-1, at limit (ForbiddenException), BASIC over limit, PRO unlimited, no subscription defaults to FREE
+
+### Integration — `professionals/clinic-professionals.service.ts` ✅
+`assignProfessionalToClinic` calls `subscriptionsService.enforceClinicProfessionalLimit` after validating IDs and before saving, using `countDocuments({ clinicId })` as currentCount.
+
+### `professionals/clinic-professionals.module.ts` ✅ (updated)
+Imports `SubscriptionsModule` in addition to `ClinicsModule` and `ProfessionalsModule`.
+
+### `app.module.ts` ✅ (updated)
+Now imports `SubscriptionsModule`.
+
+---
+
 ## What Needs to Be Built (Next Sprints)
 
 | Module | Status | Notes |
 |---|---|---|
-| `subscriptions` module | ❌ Not started | Plan management (sprint-04) |
 | `chat` module | ❌ Not started | ChatSession with LLM integration (sprint-05) |
