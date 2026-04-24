@@ -1,9 +1,14 @@
 {
   "moduleFileExtensions": ["js", "json", "ts"],
-  "rootDir": ".",
+  "rootDir": "../src",
   "testEnvironment": "node",
-  "testRegex": ".e2e-spec.ts$",
+  "testRegex": ".e2e.spec.ts$",
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
-  }
+  },
+  "moduleNameMapper": {
+    "^@medicano/types$": "<rootDir>/../../../packages/types/src/index.ts",
+    "^@medicano/types/(.*)$": "<rootDir>/../../../packages/types/src/$1"
+  },
+  "forceExit": true
 }
