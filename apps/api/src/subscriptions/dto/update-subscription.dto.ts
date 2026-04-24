@@ -5,6 +5,7 @@ import { SubscriptionStatus } from '../../clinics/schemas/clinic.schema';
 /**
  * DTO: UpdateSubscriptionDto
  * All properties are readonly to guarantee immutability.
+ * Not using PartialType(CreateSubscriptionDto) per project conventions.
  */
 export class UpdateSubscriptionDto {
   @IsEnum(SubscriptionPlan)

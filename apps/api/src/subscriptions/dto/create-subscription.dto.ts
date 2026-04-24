@@ -1,4 +1,10 @@
-import { IsDateString, IsEnum, IsMongoId, IsOptional } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsMongoId,
+  IsNotEmpty,
+  IsOptional,
+} from 'class-validator';
 import { SubscriptionPlan } from '../schemas/subscription.schema';
 
 /**
@@ -7,6 +13,7 @@ import { SubscriptionPlan } from '../schemas/subscription.schema';
  */
 export class CreateSubscriptionDto {
   @IsMongoId()
+  @IsNotEmpty()
   readonly clinicId!: string;
 
   @IsEnum(SubscriptionPlan)

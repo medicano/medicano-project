@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Post, Put, Param, HttpCode, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Param,
+  HttpCode,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -16,7 +25,9 @@ export class SubscriptionsController {
 
   @Post()
   @Roles(Role.CLINIC)
-  async create(@Body() dto: CreateSubscriptionDto): Promise<SubscriptionDocument> {
+  async create(
+    @Body() dto: CreateSubscriptionDto,
+  ): Promise<SubscriptionDocument> {
     return this.subscriptionsService.create(dto);
   }
 
