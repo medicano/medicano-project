@@ -7,6 +7,7 @@ import { UsersModule } from './users/users.module';
 import { ClinicsModule } from './clinics/clinics.module';
 import { ProfessionalsModule } from './professionals/professionals.module';
 import { ClinicProfessionalsModule } from './professionals/clinic-professionals.module';
+import { AppointmentsModule } from './appointments/appointments.module';
 
 @Module({
   imports: [
@@ -15,8 +16,8 @@ import { ClinicProfessionalsModule } from './professionals/clinic-professionals.
     }),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        uri: configService.get<string>('MONGODB_URI') || 'mongodb://localhost:27017/medicano',
+      useFactory: (configService: ConfigService) => ({
+        uri: configService.get<string>('MONGODB_URI'),
       }),
       inject: [ConfigService],
     }),
@@ -26,6 +27,7 @@ import { ClinicProfessionalsModule } from './professionals/clinic-professionals.
     ClinicsModule,
     ProfessionalsModule,
     ClinicProfessionalsModule,
+    AppointmentsModule,
   ],
 })
 export class AppModule {}

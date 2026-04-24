@@ -1,11 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import * as request from 'supertest';
+import { getConnectionToken } from '@nestjs/mongoose';
+import { Connection } from 'mongoose';
+import request from 'supertest';
 import { AppModule } from '../../app.module';
 import { Role } from '../../common/enums/role.enum';
+import { loadAwsSecrets } from '../../common/config/aws-secrets.loader';
 
 describe('Auth E2E Tests', () => {
   let app: INestApplication;
+  let mongoConnection: Connection;
 
   const testUser = {
     email: 'e2e@test.com',
@@ -14,6 +18,9 @@ describe('Auth E2E Tests', () => {
   };
 
   beforeAll(async () => {
+    const secrets = await loadAwsSecrets();
+    Object.assign(process.env, secrets);
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
@@ -28,9 +35,17 @@ describe('Auth E2E Tests', () => {
     );
 
     await app.init();
+
+    mongoConnection = moduleFixture.get<Connection>(getConnectionToken());
+    await mongoConnection.collection('users').deleteMany({
+      email: { $in: ['e2e@test.com', 'flow@test.com'] },
+    });
   });
 
   afterAll(async () => {
+    await mongoConnection.collection('users').deleteMany({
+      email: { $in: ['e2e@test.com', 'flow@test.com'] },
+    });
     await app.close();
   });
 

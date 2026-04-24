@@ -27,6 +27,54 @@ medicano-project/
 
 ---
 
+## Como Rodar o Projeto
+
+### Pré-requisitos
+
+- Node.js 20+
+- Docker (MongoDB + Redis)
+- AWS CLI configurado (`aws configure` ou AWS SSO) com acesso ao Secrets Manager
+
+### Infraestrutura local
+
+```bash
+sudo docker compose up -d   # sobe MongoDB (27017) e Redis (6379)
+```
+
+### API (`apps/api`)
+
+A API busca toda a configuração do AWS Secrets Manager — não há `.env`. O secret é selecionado pelo `NODE_ENV`:
+
+| Ambiente | Secret buscado | Comando |
+|---|---|---|
+| Development | `medicano/api/development` | `npm run start:dev` |
+| Staging | `medicano/api/staging` | `npm run start:staging` |
+| Production | `medicano/api/production` | `npm run start:prod` |
+
+Cada secret é um JSON no formato:
+
+```json
+{
+  "MONGODB_URI": "mongodb://...",
+  "REDIS_HOST": "...",
+  "REDIS_PORT": "6379",
+  "JWT_SECRET": "..."
+}
+```
+
+A região AWS é lida de `AWS_REGION` (default: `us-east-1`).
+
+### Testes
+
+```bash
+cd apps/api
+npm test          # unitários + E2E (requer MongoDB e Redis rodando)
+```
+
+Os testes rodam com `NODE_ENV=test`. Nesse ambiente, `loadAwsSecrets` não chama a AWS — retorna config local hardcoded apontando para o Docker local (`mongodb://localhost:27017/medicano-test`, Redis em `localhost`).
+
+---
+
 ## Stack Completa
 
 | Camada       | Tecnologia                                          |

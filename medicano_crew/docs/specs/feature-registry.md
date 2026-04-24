@@ -4,7 +4,7 @@ This file is the canonical inventory of every file, class, and method that alrea
 exists in the codebase. Before creating anything, check here first.
 If it is listed here, **do not recreate it** — import it from the path shown.
 
-Last updated: 2026-04-23 (sprint-01-auth implementation complete)
+Last updated: 2026-04-23 (sprint-02-rbac + sprint-03-appointments implementation)
 
 ---
 
@@ -14,8 +14,8 @@ Last updated: 2026-04-23 (sprint-01-auth implementation complete)
 |---|---|---|
 | `packages/types/package.json` | ✅ | package name: `@medicano/types` |
 | `packages/types/tsconfig.json` | ✅ | — |
-| `packages/types/src/auth.ts` | ❌ needs creation | UserRole, IUser, IClinic, IProfessional, IClinicProfessional, IAuthTokens, ILoginStandardDto, ILoginAttendantDto |
-| `packages/types/src/index.ts` | ❌ needs creation | re-exports from ./auth |
+| `packages/types/src/auth.ts` | ✅ | UserRole, IUser, IClinic, IProfessional, IClinicProfessional, IAuthTokens, ILoginStandardDto, ILoginAttendantDto |
+| `packages/types/src/index.ts` | ✅ | re-exports from ./auth |
 
 ---
 
@@ -42,6 +42,24 @@ export const CurrentUser = createParamDecorator(...)
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter
 // catch(exception, host): returns { statusCode, message, timestamp }
+```
+
+### `common/config/aws-secrets.loader.ts` ✅
+```typescript
+export async function loadAwsSecrets(): Promise<Record<string, string>>
+// NODE_ENV=test: returns hardcoded local config (mongodb://localhost:27017/medicano-test, Redis localhost)
+// NODE_ENV=development|staging|production: fetches JSON from AWS Secrets Manager
+// Secret name pattern: medicano/api/{NODE_ENV}
+// Region: process.env.AWS_REGION ?? 'us-east-2'
+// Throws if SecretString is empty or NODE_ENV is unrecognised
+```
+
+### `common/pipes/parse-mongo-id.pipe.ts` ✅
+```typescript
+@Injectable()
+export class ParseMongoIdPipe implements PipeTransform<string, string>
+// transform(value): validates Types.ObjectId.isValid(value), throws BadRequestException if invalid
+// Used as @Param('id', ParseMongoIdPipe) to validate route params at the controller boundary
 ```
 
 ---
@@ -192,12 +210,30 @@ export class AuthModule
 // Does NOT import MongooseModule — User model is registered in UsersModule
 ```
 
+### `auth/decorators/roles.decorator.ts` ✅
+```typescript
+export const ROLES_KEY = 'roles';
+export const Roles = (...roles: Role[]) => SetMetadata(ROLES_KEY, roles);
+```
+
+### `auth/guards/roles.guard.ts` ✅
+```typescript
+@Injectable()
+export class RolesGuard implements CanActivate
+// constructor(reflector: Reflector)
+// canActivate(context): reads ROLES_KEY metadata via Reflector.getAllAndOverride
+//   returns true if no @Roles() is set (all authenticated users allowed)
+//   checks request.user.role (populated by JwtStrategy) against requiredRoles
+// MUST be applied after JwtAuthGuard — depends on request.user being set
+```
+
 ### Auth tests — `auth/tests/` ✅
 ```
 auth/tests/auth.service.spec.ts    — 9 tests, all pass
 auth/tests/redis.service.spec.ts   — 8 tests, all pass
 auth/tests/jwt.strategy.spec.ts    — 3 tests, all pass
 auth/tests/auth.e2e.spec.ts        — 9 tests, require MongoDB + Redis (skip in unit CI)
+auth/tests/roles.guard.spec.ts     — 6 tests, all pass
 ```
 
 ---
@@ -311,13 +347,13 @@ export class ClinicsService
 
 ### `clinics/clinics.controller.ts` ✅
 ```typescript
-@Controller('clinics') @UseGuards(JwtAuthGuard)
+@Controller('clinics') @UseGuards(JwtAuthGuard, RolesGuard)
 export class ClinicsController
-  POST   /clinics       → create()
-  GET    /clinics       → findAll()
-  GET    /clinics/:id   → findOne()
-  PUT    /clinics/:id   → update()
-  DELETE /clinics/:id   → remove()
+  POST   /clinics       @Roles(CLINIC)   → create()
+  GET    /clinics                        → findAll()
+  GET    /clinics/:id                    → findOne()
+  PUT    /clinics/:id   @Roles(CLINIC)   → update()
+  DELETE /clinics/:id   @Roles(CLINIC)   → remove()
 ```
 
 ### `clinics/clinics.module.ts` ✅
@@ -384,13 +420,13 @@ export class ProfessionalsService
 
 ### `professionals/professionals.controller.ts` ✅
 ```typescript
-@Controller('professionals') @UseGuards(JwtAuthGuard)
+@Controller('professionals') @UseGuards(JwtAuthGuard, RolesGuard)
 export class ProfessionalsController
-  POST   /professionals       → create()
-  GET    /professionals       → findAll()
-  GET    /professionals/:id   → findOne()
-  PUT    /professionals/:id   → update()
-  DELETE /professionals/:id   → remove()
+  POST   /professionals       @Roles(CLINIC)   → create()
+  GET    /professionals                        → findAll()
+  GET    /professionals/:id                    → findOne()
+  PUT    /professionals/:id   @Roles(CLINIC)   → update()
+  DELETE /professionals/:id   @Roles(CLINIC)   → remove()
 ```
 
 ### `professionals/professionals.module.ts` ✅
@@ -417,11 +453,11 @@ export class ClinicProfessionalsService
 
 ### `professionals/clinic-professionals.controller.ts` ✅
 ```typescript
-@Controller('clinics') @UseGuards(JwtAuthGuard)
+@Controller('clinics') @UseGuards(JwtAuthGuard, RolesGuard)
 export class ClinicProfessionalsController
-  POST   /clinics/:clinicId/professionals/:professionalId → assignProfessionalToClinic()
-  GET    /clinics/:clinicId/professionals                 → getProfessionalsByClinic()
-  DELETE /clinics/:clinicId/professionals/:professionalId → removeProfessionalFromClinic()
+  POST   /clinics/:clinicId/professionals/:professionalId   @Roles(CLINIC, ATTENDANT) → assignProfessionalToClinic()
+  GET    /clinics/:clinicId/professionals                                              → getProfessionalsByClinic()
+  DELETE /clinics/:clinicId/professionals/:professionalId   @Roles(CLINIC, ATTENDANT) → removeProfessionalFromClinic()
 ```
 
 ### `professionals/clinic-professionals.module.ts` ✅
@@ -444,7 +480,8 @@ export class ClinicProfessionalsModule
 
 ### `app.module.ts` ✅
 Imports: ConfigModule (global), MongooseModule (forRootAsync), RedisModule (global),
-AuthModule, UsersModule, ClinicsModule, ProfessionalsModule, ClinicProfessionalsModule
+AuthModule, UsersModule, ClinicsModule, ProfessionalsModule, ClinicProfessionalsModule,
+AppointmentsModule
 
 ### `main.ts` ✅
 Bootstrap: ValidationPipe (whitelist, forbidNonWhitelisted, transform), AllExceptionsFilter,
@@ -452,13 +489,147 @@ enableCors(), port from `process.env.PORT ?? 3000`
 
 ---
 
+---
+
+## Appointments — `apps/api/src/appointments`
+
+### `appointments/schemas/appointment.schema.ts` ✅
+```typescript
+export enum AppointmentStatus {
+  SCHEDULED = 'scheduled',
+  CONFIRMED = 'confirmed',
+  COMPLETED = 'completed',
+  CANCELLED = 'cancelled',
+}
+
+export const VALID_STATUS_TRANSITIONS: Record<AppointmentStatus, AppointmentStatus[]>
+// SCHEDULED → [CONFIRMED, CANCELLED]
+// CONFIRMED → [COMPLETED, CANCELLED]
+// COMPLETED → []   (terminal)
+// CANCELLED → []   (terminal)
+
+@Schema({ timestamps: true })
+export class Appointment
+  clinicId: Types.ObjectId        // required
+  professionalId: Types.ObjectId  // required
+  patientId: Types.ObjectId       // required
+  startAt: Date                   // required
+  endAt: Date                     // required, computed: startAt + durationMinutes * 60s
+  durationMinutes: number         // required, min: 15, max: 480
+  status: AppointmentStatus       // default: SCHEDULED
+  notes?: string
+
+export type AppointmentDocument = Appointment & Document
+export const AppointmentSchema = SchemaFactory.createForClass(Appointment)
+// Index: { professionalId: 1, startAt: 1, endAt: 1 }
+```
+
+### `appointments/dto/create-appointment.dto.ts` ✅
+```typescript
+export class CreateAppointmentDto
+  clinicId: string        // @IsMongoId
+  professionalId: string  // @IsMongoId
+  patientId: string       // @IsMongoId
+  startAt: string         // @IsDateString
+  durationMinutes: number // @IsInt @Min(15) @Max(480)
+  notes?: string          // @IsString @IsOptional
+```
+
+### `appointments/dto/update-appointment.dto.ts` ✅
+```typescript
+export class UpdateAppointmentDto  // all fields optional
+  startAt?: string          // @IsDateString @IsOptional
+  durationMinutes?: number  // @IsInt @Min(15) @Max(480) @IsOptional
+  notes?: string            // @IsString @IsOptional
+```
+
+### `appointments/dto/update-appointment-status.dto.ts` ✅
+```typescript
+export class UpdateAppointmentStatusDto
+  status: AppointmentStatus  // @IsEnum(AppointmentStatus)
+```
+
+### `appointments/dto/get-appointments-query.dto.ts` ✅
+```typescript
+export class GetAppointmentsQueryDto  // all fields optional
+  clinicId?: string        // @IsMongoId @IsOptional
+  professionalId?: string  // @IsMongoId @IsOptional
+  patientId?: string       // @IsMongoId @IsOptional
+  date?: string            // @IsDateString @IsOptional — filters startAt on that UTC calendar day
+  status?: AppointmentStatus  // @IsEnum @IsOptional
+```
+
+### `appointments/appointments.service.ts` ✅
+```typescript
+@Injectable()
+export class AppointmentsService
+  create(dto: CreateAppointmentDto): Promise<AppointmentDocument>
+    // computes endAt = startAt + durationMinutes * 60 * 1000ms
+    // calls checkConflict(professionalId, startAt, endAt)
+    // status defaults to SCHEDULED
+
+  findAll(query: GetAppointmentsQueryDto): Promise<AppointmentDocument[]>
+    // builds filter from query params; date filter: startAt >= 00:00, < next day 00:00 (UTC)
+    // sorts by startAt ascending
+
+  findById(id: string): Promise<AppointmentDocument>
+    // throws NotFoundException for invalid ObjectId or not found
+
+  update(id: string, dto: UpdateAppointmentDto): Promise<AppointmentDocument>
+    // fetches existing to merge startAt/durationMinutes before recomputing endAt
+    // calls checkConflict(..., excludeId: id)
+    // uses findByIdAndUpdate({ new: true })
+
+  updateStatus(id: string, dto: UpdateAppointmentStatusDto): Promise<AppointmentDocument>
+    // validates transition against VALID_STATUS_TRANSITIONS
+    // throws BadRequestException for invalid transitions
+
+  cancel(id: string): Promise<{ success: boolean }>
+    // shorthand: updateStatus(id, { status: CANCELLED })
+
+  private checkConflict(professionalId, startAt, endAt, excludeId?): Promise<void>
+    // query: { professionalId, status: { $nin: [CANCELLED] }, startAt: { $lt: endAt }, endAt: { $gt: startAt } }
+    // throws ConflictException if overlapping appointment found
+```
+
+### `appointments/appointments.controller.ts` ✅
+```typescript
+@Controller('appointments') @UseGuards(JwtAuthGuard, RolesGuard)
+export class AppointmentsController
+  POST   /appointments               @Roles(CLINIC, ATTENDANT)              → create()
+  GET    /appointments                                                        → findAll(@Query)
+  GET    /appointments/:id                                                    → findById()
+  PUT    /appointments/:id           @Roles(CLINIC, ATTENDANT)              → update()
+  PATCH  /appointments/:id/status    @Roles(CLINIC, ATTENDANT, PROFESSIONAL) → updateStatus()
+  DELETE /appointments/:id           @Roles(CLINIC, ATTENDANT) @HttpCode(204) → cancel()
+// Uses ParseMongoIdPipe on :id params
+```
+
+### `appointments/appointments.module.ts` ✅
+```typescript
+@Module({
+  imports: [MongooseModule.forFeature([{ name: Appointment.name, schema: AppointmentSchema }])],
+  controllers: [AppointmentsController],
+  providers: [AppointmentsService],
+  exports: [AppointmentsService],
+})
+export class AppointmentsModule
+```
+
+### `appointments/tests/appointments.service.spec.ts` ✅
+12 tests, all pass:
+- create: computes endAt correctly, throws ConflictException on overlap
+- findAll: no filter, by clinicId, by date (UTC day range)
+- findById: found, invalid ObjectId, not found
+- update: rechecks conflict excluding self
+- updateStatus: SCHEDULED → CONFIRMED, throws BadRequestException for COMPLETED → SCHEDULED
+- cancel: sets CANCELLED, returns { success: true }
+
+---
+
 ## What Needs to Be Built (Next Sprints)
 
 | Module | Status | Notes |
 |---|---|---|
-| `packages/types/src/` | ❌ Not created | auth.ts and index.ts needed |
-| `auth/decorators/roles.decorator.ts` | ❌ Not created | `@Roles(...roles)` decorator |
-| `auth/guards/roles.guard.ts` | ❌ Not created | `RolesGuard` |
-| `appointments` module | ❌ Not started | Full CRUD + conflict detection |
-| `chat` module | ❌ Not started | ChatSession with LLM integration |
-| `subscriptions` module | ❌ Not started | Plan management |
+| `subscriptions` module | ❌ Not started | Plan management (sprint-04) |
+| `chat` module | ❌ Not started | ChatSession with LLM integration (sprint-05) |

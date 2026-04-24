@@ -2,8 +2,12 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { loadAwsSecrets } from './common/config/aws-secrets.loader';
 
 async function bootstrap() {
+  const secrets = await loadAwsSecrets();
+  Object.assign(process.env, secrets);
+
   const app = await NestFactory.create(AppModule);
 
   app.useGlobalPipes(
