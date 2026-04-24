@@ -7,3 +7,6 @@ dist/
 .DS_Store
 Thumbs.db
 .vscode
+api@0.0.1
+prettier
+apps/api/coverage/
