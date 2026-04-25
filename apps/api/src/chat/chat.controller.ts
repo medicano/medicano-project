@@ -15,6 +15,7 @@ import { CreateChatSessionDto } from './dto/create-chat-session.dto';
 import { CreateChatMessageDto } from './dto/create-chat-message.dto';
 import { ChatSessionDocument } from './schemas/chat-session.schema';
 import { ChatMessageDocument } from './schemas/chat-message.schema';
+import { SendMessageResponse } from './dto/send-message-response.dto';
 
 @Controller('chat')
 @UseGuards(JwtAuthGuard)
@@ -40,7 +41,7 @@ export class ChatController {
   async sendMessage(
     @Param('sessionId', ParseMongoIdPipe) sessionId: string,
     @Body() dto: CreateChatMessageDto,
-  ): Promise<ChatMessageDocument> {
+  ): Promise<SendMessageResponse> {
     return this.chatService.sendMessage(sessionId, dto);
   }
 

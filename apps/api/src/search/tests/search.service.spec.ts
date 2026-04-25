@@ -21,13 +21,13 @@ const clinicFixture = [
   {
     _id: 'clinic-1',
     name: 'Clinic One',
-    specialties: [Specialty.CARDIOLOGY],
+    specialties: [Specialty.MEDICINE],
     address: { city: 'Porto' },
   },
   {
     _id: 'clinic-2',
     name: 'Clinic Two',
-    specialties: [Specialty.DERMATOLOGY],
+    specialties: [Specialty.PSYCHOLOGY],
     address: { city: 'Lisboa' },
   },
 ];
@@ -36,13 +36,13 @@ const professionalFixture = [
   {
     _id: 'pro-1',
     name: 'Dr. Alice',
-    specialties: [Specialty.CARDIOLOGY],
+    specialty: Specialty.MEDICINE,
     address: { city: 'Porto' },
   },
   {
     _id: 'pro-2',
     name: 'Dr. Bob',
-    specialties: [Specialty.DERMATOLOGY],
+    specialty: Specialty.PSYCHOLOGY,
     address: { city: 'Lisboa' },
   },
 ];
@@ -99,14 +99,15 @@ describe('SearchService', () => {
         createQueryMock([professionalFixture[0]]),
       );
 
-      const dto: SearchQueryDto = { specialty: Specialty.CARDIOLOGY };
+      const dto: SearchQueryDto = { specialty: Specialty.MEDICINE };
       await service.search(dto);
 
-      const expectedFilter = {
-        specialties: { $in: [Specialty.CARDIOLOGY] },
-      };
-      expect(clinicModel.find).toHaveBeenCalledWith(expectedFilter);
-      expect(professionalModel.find).toHaveBeenCalledWith(expectedFilter);
+      expect(clinicModel.find).toHaveBeenCalledWith({
+        specialties: { $in: [Specialty.MEDICINE] },
+      });
+      expect(professionalModel.find).toHaveBeenCalledWith({
+        specialty: Specialty.MEDICINE,
+      });
     });
 
     it('filters by city correctly', async () => {
@@ -130,17 +131,19 @@ describe('SearchService', () => {
       );
 
       const dto: SearchQueryDto = {
-        specialty: Specialty.CARDIOLOGY,
+        specialty: Specialty.MEDICINE,
         city: 'Porto',
       };
       await service.search(dto);
 
-      const expectedFilter = {
-        specialties: { $in: [Specialty.CARDIOLOGY] },
+      expect(clinicModel.find).toHaveBeenCalledWith({
+        specialties: { $in: [Specialty.MEDICINE] },
         'address.city': 'Porto',
-      };
-      expect(clinicModel.find).toHaveBeenCalledWith(expectedFilter);
-      expect(professionalModel.find).toHaveBeenCalledWith(expectedFilter);
+      });
+      expect(professionalModel.find).toHaveBeenCalledWith({
+        specialty: Specialty.MEDICINE,
+        'address.city': 'Porto',
+      });
     });
 
     it('returns only clinics when type=clinic', async () => {

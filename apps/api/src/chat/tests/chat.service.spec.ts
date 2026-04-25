@@ -87,7 +87,7 @@ describe('ChatService', () => {
         exec: jest.fn().mockResolvedValue(session),
       });
       messageModel.find.mockReturnValue({
-        sort: () => ({ exec: jest.fn().mockResolvedValue([]) }),
+        sort: () => ({ limit: () => ({ exec: jest.fn().mockResolvedValue([]) }) }),
       });
       messageModel.create.mockImplementation(async (doc) => doc);
       anthropicClient.messages.create.mockResolvedValue({
@@ -108,9 +108,9 @@ describe('ChatService', () => {
       });
       messageModel.find.mockReturnValue({
         sort: () => ({
-          exec: jest
-            .fn()
-            .mockResolvedValue([buildMessageDoc('user', 'prior')]),
+          limit: () => ({
+            exec: jest.fn().mockResolvedValue([buildMessageDoc('user', 'prior')]),
+          }),
         }),
       });
       messageModel.create.mockImplementation(async (doc) => doc);
@@ -142,9 +142,9 @@ describe('ChatService', () => {
       });
       messageModel.find.mockReturnValue({
         sort: () => ({
-          exec: jest
-            .fn()
-            .mockResolvedValue([buildMessageDoc('user', 'prior')]),
+          limit: () => ({
+            exec: jest.fn().mockResolvedValue([buildMessageDoc('user', 'prior')]),
+          }),
         }),
       });
       messageModel.create.mockImplementation(async (doc) => doc);
@@ -169,9 +169,9 @@ describe('ChatService', () => {
       });
       messageModel.find.mockReturnValue({
         sort: () => ({
-          exec: jest
-            .fn()
-            .mockResolvedValue([buildMessageDoc('user', 'prior')]),
+          limit: () => ({
+            exec: jest.fn().mockResolvedValue([buildMessageDoc('user', 'prior')]),
+          }),
         }),
       });
       messageModel.create.mockImplementation(async (doc) => doc);
@@ -212,7 +212,7 @@ describe('ChatService', () => {
         exec: jest.fn().mockResolvedValue(session),
       });
       messageModel.find.mockReturnValue({
-        sort: () => ({ exec: jest.fn().mockResolvedValue([]) }),
+        sort: () => ({ limit: () => ({ exec: jest.fn().mockResolvedValue([]) }) }),
       });
       messageModel.create.mockImplementation(async (doc) => doc);
       anthropicClient.messages.create.mockResolvedValue({
@@ -232,9 +232,9 @@ describe('ChatService', () => {
       });
       messageModel.find.mockReturnValue({
         sort: () => ({
-          exec: jest
-            .fn()
-            .mockResolvedValue([buildMessageDoc('user', 'prior')]),
+          limit: () => ({
+            exec: jest.fn().mockResolvedValue([buildMessageDoc('user', 'prior')]),
+          }),
         }),
       });
       messageModel.create.mockImplementation(async (doc) => doc);
@@ -263,7 +263,7 @@ describe('ChatService', () => {
         exec: jest.fn().mockResolvedValue(session),
       });
       messageModel.find.mockReturnValue({
-        sort: () => ({ exec: jest.fn().mockResolvedValue([]) }),
+        sort: () => ({ limit: () => ({ exec: jest.fn().mockResolvedValue([]) }) }),
       });
       const persisted = buildMessageDoc('assistant', 'Hi there');
       messageModel.create

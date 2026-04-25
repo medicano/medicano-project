@@ -9,6 +9,7 @@ import {
 import { Types } from 'mongoose';
 import { AvailabilityService } from '../availability.service';
 import { ProfessionalAvailability } from '../schemas/professional-availability.schema';
+import { Appointment } from '../../appointments/schemas/appointment.schema';
 import { ProfessionalsService } from '../../professionals/professionals.service';
 import { Role } from '../../common/enums/role.enum';
 
@@ -25,6 +26,14 @@ function MockAvailabilityModel(this: any, dto: any) {
 MockAvailabilityModel.findOne = jest.fn();
 MockAvailabilityModel.findById = jest.fn();
 MockAvailabilityModel.findByIdAndDelete = jest.fn();
+
+const mockAppointmentModel = {
+  find: jest.fn().mockReturnValue({
+    select: jest.fn().mockReturnValue({
+      exec: jest.fn().mockResolvedValue([]),
+    }),
+  }),
+};
 
 const mockProfessionalsService = {
   findById: jest.fn(),
@@ -44,6 +53,10 @@ describe('AvailabilityService', () => {
         {
           provide: getModelToken(ProfessionalAvailability.name),
           useValue: MockAvailabilityModel,
+        },
+        {
+          provide: getModelToken(Appointment.name),
+          useValue: mockAppointmentModel,
         },
         {
           provide: ProfessionalsService,

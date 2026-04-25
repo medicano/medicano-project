@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, FilterQuery } from 'mongoose';
+import { Model } from 'mongoose';
 
 import { Clinic, ClinicDocument } from '../clinics/schemas/clinic.schema';
 import { Professional, ProfessionalDocument } from '../professionals/schemas/professional.schema';
@@ -19,11 +19,11 @@ export class SearchService {
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const clinicFilter: FilterQuery<ClinicDocument> = {};
-    const professionalFilter: FilterQuery<ProfessionalDocument> = {};
+    const clinicFilter: Record<string, unknown> = {};
+    const professionalFilter: Record<string, unknown> = {};
 
     if (query.specialty) {
-      clinicFilter.specialties = query.specialty;
+      clinicFilter['specialties'] = { $in: [query.specialty] };
       professionalFilter.specialty = query.specialty;
     }
     if (query.city) {
@@ -35,7 +35,7 @@ export class SearchService {
     let professionals: ProfessionalDocument[] = [];
 
     if (!query.type || query.type === 'clinic' || query.type === 'all') {
-      clinics = await this.clinicModel.find(clinicFilter).skip(skip).limit(limit).lean();
+      clinics = await this.clinicModel.find(clinicFilter).skip(skip).limit(limit).exec();
     }
 
     if (!query.type || query.type === 'professional' || query.type === 'all') {
@@ -43,7 +43,7 @@ export class SearchService {
         .find(professionalFilter)
         .skip(skip)
         .limit(limit)
-        .lean();
+        .exec();
     }
 
     // TODO (Sprint 09): when professional subscriptions are added, filter by active plan (RN20)
@@ -58,7 +58,7 @@ export class SearchService {
   }
 
   async findClinicById(id: string): Promise<ClinicDocument> {
-    const clinic = await this.clinicModel.findById(id).lean();
+    const clinic = await this.clinicModel.findById(id).exec();
     if (!clinic) {
       throw new NotFoundException(`Clinic with id "${id}" not found`);
     }
@@ -66,7 +66,7 @@ export class SearchService {
   }
 
   async findProfessionalById(id: string): Promise<ProfessionalDocument> {
-    const professional = await this.professionalModel.findById(id).lean();
+    const professional = await this.professionalModel.findById(id).exec();
     if (!professional) {
       throw new NotFoundException(`Professional with id "${id}" not found`);
     }

@@ -16,7 +16,7 @@ export function computeSlotsForDay(
   weeklySlots: WeeklySlot[],
   appointments: { startAt: Date; endAt: Date }[],
 ): AvailableSlot[] {
-  const dayOfWeek = date.getDay();
+  const dayOfWeek = date.getUTCDay();
   const dateStr = formatDateAsYYYYMMDD(date);
 
   // Filter weekly slots for this day of week
@@ -99,13 +99,13 @@ function parseTimeOnDate(date: Date, timeStr: string): Date {
   const minutes = parseInt(minutesStr, 10);
 
   const result = new Date(date);
-  result.setHours(hours, minutes, 0, 0);
+  result.setUTCHours(hours, minutes, 0, 0);
   return result;
 }
 
 function formatDateAsYYYYMMDD(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
