@@ -30,3 +30,17 @@ export interface IUpdateProfessionalAvailabilityDto {
 export interface IGetAvailabilityQueryDto {
   date: string;
 }
+
+/**
+ * An available slot on a given date.
+ */
+export interface AvailableSlot {
+  /** YYYY-MM-DD */
+  date: string;
+  /** ISO timestamp of slot start */
+  startAt: string;
+  /** ISO timestamp of slot end */
+  endAt: string;
+  /** Duration in minutes */
+  durationMinutes: number;
+}
