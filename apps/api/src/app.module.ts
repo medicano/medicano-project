@@ -11,6 +11,7 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { ChatModule } from './chat/chat.module';
 import { SearchModule } from './search/search.module';
+import { AvailabilityModule } from './availability/availability.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { SearchModule } from './search/search.module';
     SubscriptionsModule,
     ChatModule,
     SearchModule,
+    AvailabilityModule,
   ],
 })
 export class AppModule {}
