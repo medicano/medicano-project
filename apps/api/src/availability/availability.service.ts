@@ -13,15 +13,25 @@ import {
 } from './schemas/professional-availability.schema';
 import { CreateProfessionalAvailabilityDto } from './dto/create-professional-availability.dto';
 import { UpdateProfessionalAvailabilityDto } from './dto/update-professional-availability.dto';
+import { AvailableSlotDto } from './dto/available-slot.dto';
 import { WeeklySlotDto } from '../common/dto/weekly-slot.dto';
 import { ProfessionalsService } from '../professionals/professionals.service';
 import { Role } from '../common/enums/role.enum';
+import { validateWeeklySlots } from '../common/utils/validate-weekly-slots';
+import {
+  Appointment,
+  AppointmentDocument,
+  AppointmentStatus,
+} from '../appointments/schemas/appointment.schema';
+import { computeSlotsForDay } from './utils/compute-slots';
 
 @Injectable()
 export class AvailabilityService {
   constructor(
     @InjectModel(ProfessionalAvailability.name)
     private readonly availabilityModel: Model<ProfessionalAvailabilityDocument>,
+    @InjectModel(Appointment.name)
+    private readonly appointmentModel: Model<AppointmentDocument>,
     private readonly professionalsService: ProfessionalsService,
   ) {}
 
@@ -40,7 +50,7 @@ export class AvailabilityService {
     const isUnavailable = dto.isUnavailable ?? false;
     const customSlots = dto.customSlots ?? [];
 
-    this.validateSlots(isUnavailable, customSlots);
+    this.validateAvailabilitySlots(isUnavailable, customSlots);
 
     const normalizedDate = this.normalizeDateToUtcMidnight(dto.date);
 
@@ -123,7 +133,7 @@ export class AvailabilityService {
     const nextCustomSlots =
       dto.customSlots !== undefined ? dto.customSlots : availability.customSlots;
 
-    this.validateSlots(nextIsUnavailable, nextCustomSlots);
+    this.validateAvailabilitySlots(nextIsUnavailable, nextCustomSlots);
 
     if (dto.date !== undefined) {
       availability.date = this.normalizeDateToUtcMidnight(dto.date);
@@ -164,6 +174,51 @@ export class AvailabilityService {
     return { success: true };
   }
 
+  async getAvailableSlots(
+    professionalId: string,
+    dateString: string,
+  ): Promise<AvailableSlotDto[]> {
+    const professional = await this.professionalsService.findById(
+      professionalId,
+    );
+
+    const dayStart = this.normalizeDateToUtcMidnight(dateString);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+    const override = await this.availabilityModel
+      .findOne({
+        professionalId: new Types.ObjectId(professionalId),
+        date: dayStart,
+      })
+      .exec();
+
+    if (override && override.isUnavailable) {
+      return [];
+    }
+
+    const sourceSlots: WeeklySlotDto[] =
+      override && override.customSlots && override.customSlots.length > 0
+        ? override.customSlots
+        : professional.weeklySlots ?? [];
+
+    if (sourceSlots.length === 0) {
+      return [];
+    }
+
+    const appointments = await this.appointmentModel
+      .find({
+        professionalId: new Types.ObjectId(professionalId),
+        status: { $ne: AppointmentStatus.CANCELLED },
+        startAt: { $lt: dayEnd },
+        endAt: { $gt: dayStart },
+      })
+      .select('startAt endAt')
+      .exec();
+
+    return computeSlotsForDay(dayStart, sourceSlots, appointments);
+  }
+
   private async enforceOwnership(
     professionalId: string,
     currentUserId: string,
@@ -189,7 +244,7 @@ export class AvailabilityService {
     return date;
   }
 
-  private validateSlots(
+  private validateAvailabilitySlots(
     isUnavailable: boolean,
     customSlots: WeeklySlotDto[],
   ): void {
@@ -199,37 +254,7 @@ export class AvailabilityService {
       );
     }
 
-    if (customSlots.length === 0) {
-      return;
-    }
-
-    for (const slot of customSlots) {
-      if (slot.startTime >= slot.endTime) {
-        throw new BadRequestException(
-          `Invalid time range: startTime (${slot.startTime}) must be before endTime (${slot.endTime})`,
-        );
-      }
-    }
-
-    const sorted = [...customSlots].sort((a, b) => {
-      if (a.dayOfWeek !== b.dayOfWeek) {
-        return a.dayOfWeek - b.dayOfWeek;
-      }
-      return a.startTime.localeCompare(b.startTime);
-    });
-
-    for (let index = 0; index < sorted.length - 1; index++) {
-      const current = sorted[index];
-      const next = sorted[index + 1];
-      if (
-        current.dayOfWeek === next.dayOfWeek &&
-        current.endTime > next.startTime
-      ) {
-        throw new BadRequestException(
-          `Overlapping slots detected on day ${current.dayOfWeek}: ${current.startTime}-${current.endTime} and ${next.startTime}-${next.endTime}`,
-        );
-      }
-    }
+    validateWeeklySlots(customSlots);
   }
 
   private isDuplicateKeyError(error: unknown): boolean {

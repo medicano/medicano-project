@@ -14,6 +14,7 @@ import { AvailabilityService } from './availability.service';
 import { CreateProfessionalAvailabilityDto } from './dto/create-professional-availability.dto';
 import { UpdateProfessionalAvailabilityDto } from './dto/update-professional-availability.dto';
 import { GetAvailabilityQueryDto } from './dto/get-availability-query.dto';
+import { AvailableSlotDto } from './dto/available-slot.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -54,6 +55,17 @@ export class AvailabilityController {
     @Query() query: GetAvailabilityQueryDto,
   ): Promise<ProfessionalAvailability | null> {
     return this.availabilityService.findByProfessionalAndDate(
+      professionalId,
+      query.date,
+    );
+  }
+
+  @Get('professionals/:professionalId/availability/slots')
+  async getAvailableSlots(
+    @Param('professionalId', ParseMongoIdPipe) professionalId: string,
+    @Query() query: GetAvailabilityQueryDto,
+  ): Promise<AvailableSlotDto[]> {
+    return this.availabilityService.getAvailableSlots(
       professionalId,
       query.date,
     );

@@ -6,6 +6,10 @@ import {
   ProfessionalAvailability,
   ProfessionalAvailabilitySchema,
 } from './schemas/professional-availability.schema';
+import {
+  Appointment,
+  AppointmentSchema,
+} from '../appointments/schemas/appointment.schema';
 import { ProfessionalsModule } from '../professionals/professionals.module';
 
 @Module({
@@ -15,6 +19,7 @@ import { ProfessionalsModule } from '../professionals/professionals.module';
         name: ProfessionalAvailability.name,
         schema: ProfessionalAvailabilitySchema,
       },
+      { name: Appointment.name, schema: AppointmentSchema },
     ]),
     ProfessionalsModule,
   ],

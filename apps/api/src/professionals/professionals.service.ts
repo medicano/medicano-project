@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -11,7 +12,10 @@ import {
 } from './schemas/professional.schema';
 import { CreateProfessionalDto } from './dto/create-professional.dto';
 import { UpdateProfessionalDto } from './dto/update-professional.dto';
+import { UpdateWeeklySlotsDto } from './dto/update-weekly-slots.dto';
 import { Specialty } from '../common/enums/specialty.enum';
+import { Role } from '../common/enums/role.enum';
+import { validateWeeklySlots } from '../common/utils/validate-weekly-slots';
 
 interface FindAllFilter {
   city?: string;
@@ -100,6 +104,29 @@ export class ProfessionalsService {
       }
       throw err;
     }
+  }
+
+  async updateWeeklySlots(
+    id: string,
+    dto: UpdateWeeklySlotsDto,
+    currentUserId: string,
+    currentUserRole: Role,
+  ): Promise<ProfessionalDocument> {
+    const professional = await this.findById(id);
+
+    if (
+      currentUserRole === Role.PROFESSIONAL &&
+      professional.userId._id.toString() !== currentUserId
+    ) {
+      throw new ForbiddenException(
+        'You can only manage your own weekly slots',
+      );
+    }
+
+    validateWeeklySlots(dto.weeklySlots);
+
+    professional.weeklySlots = dto.weeklySlots;
+    return professional.save();
   }
 
   async remove(id: string): Promise<{ success: boolean }> {
