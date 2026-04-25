@@ -1,17 +1,22 @@
+import os
 from typing import List
 from crewai import Agent, Crew, LLM, Process, Task
 from crewai.agents.agent_builder.base_agent import BaseAgent
 from crewai.project import CrewBase, agent, crew, task
 
-_gemini_llm = LLM(
-    model="openrouter/google/gemini-2.5-pro",
-    extra_body={
-        "provider": {
-            "order": ["Google AI Studio"],
-            "allow_fallbacks": False,
-        }
-    },
-)
+PROVIDER = os.getenv("LLM_PROVIDER", "openrouter")
+
+
+def _llm(openrouter_model: str, vertex_model: str) -> LLM:
+    if PROVIDER == "vertex":
+        return LLM(model=vertex_model)
+    return LLM(model=f"openrouter/{openrouter_model}")
+
+
+_architect_llm  = _llm("openai/o4-mini",              "vertex_ai/gemini-2.5-flash")
+_developer_llm  = _llm("anthropic/claude-sonnet-4-5", "vertex_ai/claude-opus-4-7")
+_documenter_llm = _llm("google/gemini-2.5-flash",     "vertex_ai/gemini-2.5-flash")
+_reviewer_llm   = _llm("openai/o4-mini",              "vertex_ai/gemini-2.5-flash")
 
 
 @CrewBase
@@ -32,6 +37,7 @@ class DevCrew:
     def architect(self) -> Agent:
         return Agent(
             config=self.agents_config["architect"],  # type: ignore[index]
+            llm=_architect_llm,
             verbose=True,
         )
 
@@ -39,6 +45,7 @@ class DevCrew:
     def developer(self) -> Agent:
         return Agent(
             config=self.agents_config["developer"],  # type: ignore[index]
+            llm=_developer_llm,
             verbose=True,
         )
 
@@ -46,7 +53,7 @@ class DevCrew:
     def documenter(self) -> Agent:
         return Agent(
             config=self.agents_config["documenter"],  # type: ignore[index]
-            llm=_gemini_llm,
+            llm=_documenter_llm,
             verbose=True,
         )
 
@@ -54,6 +61,7 @@ class DevCrew:
     def reviewer(self) -> Agent:
         return Agent(
             config=self.agents_config["reviewer"],  # type: ignore[index]
+            llm=_reviewer_llm,
             verbose=True,
         )
 
