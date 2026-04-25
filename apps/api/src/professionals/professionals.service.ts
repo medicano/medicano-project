@@ -1,8 +1,7 @@
 import {
+  ConflictException,
   Injectable,
   NotFoundException,
-  BadRequestException,
-  ConflictException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -12,41 +11,52 @@ import {
 } from './schemas/professional.schema';
 import { CreateProfessionalDto } from './dto/create-professional.dto';
 import { UpdateProfessionalDto } from './dto/update-professional.dto';
+import { Specialty } from '../common/enums/specialty.enum';
+
+interface FindAllFilter {
+  city?: string;
+  specialty?: Specialty;
+}
 
 @Injectable()
 export class ProfessionalsService {
   constructor(
     @InjectModel(Professional.name)
-    private professionalModel: Model<ProfessionalDocument>,
+    private readonly professionalModel: Model<ProfessionalDocument>,
   ) {}
 
-  async create(
-    createProfessionalDto: CreateProfessionalDto,
-  ): Promise<ProfessionalDocument> {
-    if (!Types.ObjectId.isValid(createProfessionalDto.userId)) {
-      throw new BadRequestException(
-        `Invalid user ID: ${createProfessionalDto.userId}`,
-      );
+  async create(dto: CreateProfessionalDto): Promise<ProfessionalDocument> {
+    if (!Types.ObjectId.isValid(dto.userId)) {
+      throw new NotFoundException(`Invalid user ID: ${dto.userId}`);
     }
 
     try {
-      const professional = new this.professionalModel({
-        specialty: createProfessionalDto.specialty,
-        userId: new Types.ObjectId(createProfessionalDto.userId),
+      const created = new this.professionalModel({
+        ...dto,
+        userId: new Types.ObjectId(dto.userId),
       });
-      return await professional.save();
-    } catch (error: unknown) {
-      if ((error as { code?: number }).code === 11000) {
+      return await created.save();
+    } catch (err: unknown) {
+      if (this.isDuplicateKeyError(err)) {
         throw new ConflictException(
-          'A professional with this userId already exists',
+          'A professional with this CPF or userId already exists',
         );
       }
-      throw error;
+      throw err;
     }
   }
 
-  async findAll(): Promise<ProfessionalDocument[]> {
-    return this.professionalModel.find().populate('userId').exec();
+  async findAll(filter: FindAllFilter = {}): Promise<ProfessionalDocument[]> {
+    const query: Record<string, unknown> = {};
+
+    if (filter.city) {
+      query['address.city'] = filter.city;
+    }
+    if (filter.specialty) {
+      query.specialty = filter.specialty;
+    }
+
+    return this.professionalModel.find(query).populate('userId').exec();
   }
 
   async findById(id: string): Promise<ProfessionalDocument> {
@@ -68,22 +78,28 @@ export class ProfessionalsService {
 
   async update(
     id: string,
-    updateProfessionalDto: UpdateProfessionalDto,
+    dto: UpdateProfessionalDto,
   ): Promise<ProfessionalDocument> {
     if (!Types.ObjectId.isValid(id)) {
       throw new NotFoundException(`Invalid professional ID: ${id}`);
     }
 
-    const professional = await this.professionalModel
-      .findByIdAndUpdate(id, updateProfessionalDto, { new: true })
-      .populate('userId')
-      .exec();
+    try {
+      const updated = await this.professionalModel
+        .findByIdAndUpdate(id, dto, { new: true, runValidators: true })
+        .populate('userId')
+        .exec();
 
-    if (!professional) {
-      throw new NotFoundException(`Professional with ID ${id} not found`);
+      if (!updated) {
+        throw new NotFoundException(`Professional with ID ${id} not found`);
+      }
+      return updated;
+    } catch (err: unknown) {
+      if (this.isDuplicateKeyError(err)) {
+        throw new ConflictException('CPF already registered');
+      }
+      throw err;
     }
-
-    return professional;
   }
 
   async remove(id: string): Promise<{ success: boolean }> {
@@ -97,5 +113,14 @@ export class ProfessionalsService {
     }
 
     return { success: true };
+  }
+
+  private isDuplicateKeyError(err: unknown): boolean {
+    return (
+      typeof err === 'object' &&
+      err !== null &&
+      'code' in err &&
+      (err as { code?: number }).code === 11000
+    );
   }
 }

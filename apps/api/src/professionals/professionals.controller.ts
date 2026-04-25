@@ -1,11 +1,13 @@
 import {
+  Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  Param,
   Post,
   Put,
-  Delete,
-  Body,
-  Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ProfessionalsService } from './professionals.service';
@@ -15,7 +17,9 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
+import { Specialty } from '../common/enums/specialty.enum';
 import { ProfessionalDocument } from './schemas/professional.schema';
+import { ParseMongoIdPipe } from '../common/pipes/parse-mongo-id.pipe';
 
 @Controller('professionals')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -31,19 +35,24 @@ export class ProfessionalsController {
   }
 
   @Get()
-  async findAll(): Promise<ProfessionalDocument[]> {
-    return this.professionalsService.findAll();
+  async findAll(
+    @Query('city') city?: string,
+    @Query('specialty') specialty?: Specialty,
+  ): Promise<ProfessionalDocument[]> {
+    return this.professionalsService.findAll({ city, specialty });
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string): Promise<ProfessionalDocument> {
+  async findOne(
+    @Param('id', ParseMongoIdPipe) id: string,
+  ): Promise<ProfessionalDocument> {
     return this.professionalsService.findById(id);
   }
 
   @Put(':id')
   @Roles(Role.CLINIC)
   async update(
-    @Param('id') id: string,
+    @Param('id', ParseMongoIdPipe) id: string,
     @Body() updateProfessionalDto: UpdateProfessionalDto,
   ): Promise<ProfessionalDocument> {
     return this.professionalsService.update(id, updateProfessionalDto);
@@ -51,7 +60,8 @@ export class ProfessionalsController {
 
   @Delete(':id')
   @Roles(Role.CLINIC)
-  async remove(@Param('id') id: string): Promise<{ success: boolean }> {
-    return this.professionalsService.remove(id);
+  @HttpCode(204)
+  async remove(@Param('id', ParseMongoIdPipe) id: string): Promise<void> {
+    await this.professionalsService.remove(id);
   }
 }
