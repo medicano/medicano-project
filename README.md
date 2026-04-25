@@ -26,6 +26,131 @@ medicano-project/
 
 ---
 
+## Como rodar a API (`apps/api`)
+
+### Pré-requisitos
+
+- Node.js 20+
+- Docker
+- AWS CLI configurado com acesso ao Secrets Manager (`aws configure` ou AWS SSO)
+
+### Infraestrutura local (Docker)
+
+O `docker-compose.yml` tem dois serviços:
+
+| Serviço   | Profile  | Quando sobe                         |
+|-----------|----------|-------------------------------------|
+| `redis`   | —        | Sempre, com `docker compose up -d`  |
+| `mongodb` | `test`   | Só para testes, com `--profile test`|
+
+Em **dev, staging e production** o MongoDB é remoto (configurado no AWS Secrets Manager). Só o Redis roda localmente:
+
+```bash
+# Sobe apenas o Redis (dev / stg / prod)
+docker compose up -d
+```
+
+Para **testes**, MongoDB e Redis precisam estar rodando localmente:
+
+```bash
+# Sobe MongoDB + Redis (testes)
+docker compose --profile test up -d
+```
+
+Para derrubar tudo:
+
+```bash
+docker compose --profile test down
+```
+
+### Configuração (AWS Secrets Manager)
+
+A API não usa `.env`. Toda a configuração vem do AWS Secrets Manager. O secret é selecionado pelo `NODE_ENV`:
+
+| Ambiente    | Secret buscado              |
+|-------------|-----------------------------|
+| development | `medicano/api/development`  |
+| staging     | `medicano/api/staging`      |
+| production  | `medicano/api/production`   |
+
+Cada secret é um JSON com os campos:
+
+```json
+{
+  "MONGODB_URI": "mongodb+srv://...",
+  "REDIS_HOST": "...",
+  "REDIS_PORT": "6379",
+  "JWT_SECRET": "...",
+  "ANTHROPIC_API_KEY": "sk-ant-..."
+}
+```
+
+A região AWS é lida de `AWS_REGION` (padrão: `us-east-1`).
+
+> Em `NODE_ENV=test` a API **não** chama a AWS — usa config local hardcoded apontando para os containers Docker (`mongodb://localhost:27017/medicano-test`, Redis em `localhost`).
+
+### Instalar dependências
+
+```bash
+cd apps/api
+npm install
+```
+
+### Rodar em desenvolvimento
+
+```bash
+# Garanta que o Redis está rodando
+docker compose up -d
+
+cd apps/api
+npm run start:dev
+```
+
+A API sobe em `http://localhost:3000` com hot-reload.
+
+### Rodar em staging
+
+```bash
+docker compose up -d
+
+cd apps/api
+npm run start:stg
+```
+
+### Rodar em production
+
+```bash
+# Build primeiro
+cd apps/api
+npm run build
+
+# Sobe a API compilada
+npm run start
+```
+
+### Rodar os testes
+
+```bash
+# Garanta que MongoDB e Redis estão rodando
+docker compose --profile test up -d
+
+cd apps/api
+npm test              # unitários + E2E
+npm run test:watch    # modo watch
+npm run test:cov      # com cobertura
+npm run test:e2e      # só E2E
+```
+
+### Verificar tipos (TypeScript)
+
+```bash
+cd apps/api
+npx tsc -p tsconfig.build.json --noEmit   # só código de produção
+npx tsc --noEmit                           # produção + testes
+```
+
+---
+
 ## Automação com CrewAI (`medicano_crew/`)
 
 O diretório `medicano_crew/` contém um flow CrewAI que recebe um pedido de implementação em linguagem natural, gera o código completo e o aplica no repositório via [Aider](https://github.com/paul-gauthier/aider).
@@ -153,9 +278,9 @@ O script salva um marcador em `output/phase_state/` ao concluir cada prompt. Se 
 
 ---
 
-## Sprint 01 — Authentication Foundation
+## Sprint 01 — Authentication Foundation ✅
 
-**Spec:** `medicano_crew/docs/specs/sprint-01-auth.md`  
+**Spec:** `medicano_crew/docs/specs/sprint-01-auth.md`
 **Prompts:** `medicano_crew/docs/specs/sprint-01-prompts.json`
 
 ### Escopo
@@ -185,21 +310,198 @@ O script salva um marcador em `output/phase_state/` ao concluir cada prompt. Se 
 
 ### Sequência de prompts
 
-| # | Nome                     | O que implementa                                        |
-|---|--------------------------|---------------------------------------------------------|
-| 1 | `shared-types`           | Interfaces e enums em `packages/types`                  |
-| 2 | `user-schema`            | Schema Mongoose do User com indexes                     |
-| 3 | `clinic-professional-schemas` | Schemas de Clinic, Professional, ClinicProfessional |
-| 4 | `users-module`           | Repositório + Service + bcrypt (cost 12)                |
-| 5 | `signup-and-login`       | Endpoints `/auth/signup` e `/auth/login` com DTOs       |
-| 6 | `redis-token-service`    | RedisService com save / validate / remove token         |
-| 7 | `jwt-strategy-and-guards`| JwtStrategy com validação dupla Redis + Guards + Decorators |
-| 8 | `logout-endpoint`        | POST `/auth/logout` que revoga o token no Redis         |
-| 9 | `auth-tests`             | Testes unitários e e2e de toda a camada de auth         |
+| # | Nome                          | O que implementa                                        |
+|---|-------------------------------|---------------------------------------------------------|
+| 1 | `shared-types`                | Interfaces e enums em `packages/types`                  |
+| 2 | `user-schema`                 | Schema Mongoose do User com indexes                     |
+| 3 | `clinic-professional-schemas` | Schemas de Clinic, Professional, ClinicProfessional     |
+| 4 | `users-module`                | Repositório + Service + bcrypt (cost 12)                |
+| 5 | `signup-and-login`            | Endpoints `/auth/signup` e `/auth/login` com DTOs       |
+| 6 | `redis-token-service`         | RedisService com save / validate / remove token         |
+| 7 | `jwt-strategy-and-guards`     | JwtStrategy com validação dupla Redis + Guards + Decorators |
+| 8 | `logout-endpoint`             | POST `/auth/logout` que revoga o token no Redis         |
+| 9 | `auth-tests`                  | Testes unitários e e2e de toda a camada de auth         |
+
+---
+
+## Sprint 02 — RBAC + Shared Types ✅
+
+**Spec:** `medicano_crew/docs/specs/sprint-02-rbac.md`
+**Prompts:** `medicano_crew/docs/specs/sprint-02-prompts.json`
+
+### Escopo
+
+- Pacote de tipos compartilhados `@medicano/types` com interfaces e enums
+- Decorator `@Roles()` e `RolesGuard` para controle de acesso baseado em papel
+- Aplicação dos guards nos controllers existentes
+
+### Sequência de prompts
+
+| # | Nome                    | O que implementa                                                    |
+|---|-------------------------|---------------------------------------------------------------------|
+| 1 | `shared-types`          | Pacote `packages/types` com interfaces `IUser`, `IClinic`, `IProfessional` |
+| 2 | `roles-decorator-guard` | Decorator `@Roles()` e `RolesGuard`                                 |
+| 3 | `controller-guards`     | Aplica `RolesGuard` e `@Roles` nos controllers existentes           |
+| 4 | `roles-guard-tests`     | Testes unitários do `RolesGuard`                                    |
+
+---
+
+## Sprint 03 — Appointments ✅
+
+**Spec:** `medicano_crew/docs/specs/sprint-03-appointments.md`
+**Prompts:** `medicano_crew/docs/specs/sprint-03-prompts.json`
+
+### Escopo
+
+- CRUD completo de agendamentos
+- Detecção de conflito de horário por profissional
+- Ciclo de vida de status: `SCHEDULED → CONFIRMED → COMPLETED / CANCELLED`
+
+### Regras de negócio
+
+- `endAt` é calculado automaticamente: `startAt + durationMinutes * 60s`
+- Conflito detectado via query de sobreposição: `startAt < endAt && endAt > startAt`
+- Transições de status válidas definidas em mapa — estados terminais (`COMPLETED`, `CANCELLED`) não permitem mais transições
+
+### Sequência de prompts
+
+| # | Nome                        | O que implementa                                              |
+|---|-----------------------------|---------------------------------------------------------------|
+| 1 | `appointment-schema`        | Schema com enum de status, mapa de transições e índice de conflito |
+| 2 | `appointment-dtos`          | DTOs de criação, atualização, filtro e mudança de status      |
+| 3 | `appointments-service`      | Service com detecção de conflito e validação de transições    |
+| 4 | `appointments-controller`   | Controller com guards por role nas rotas de mutação           |
+| 5 | `appointments-module-and-app` | Module e registro no AppModule                              |
+| 6 | `appointments-tests`        | Testes unitários: CRUD, conflito e transições de status       |
+
+---
+
+## Sprint 04 — Subscriptions ✅
+
+**Spec:** `medicano_crew/docs/specs/sprint-04-subscriptions.md`
+**Prompts:** `medicano_crew/docs/specs/sprint-04-prompts.json`
+
+### Escopo
+
+- Gerenciamento de planos de assinatura de clínicas
+- Limite de profissionais por plano (`FREE`: 2, `BASIC`: 10, `PRO`: ilimitado)
+- Integração com `ClinicProfessionalsService` para bloquear atribuições acima do limite
+
+### Regras de negócio
+
+- Uma clínica tem no máximo uma assinatura ativa (índice único em `clinicId`)
+- `enforceClinicProfessionalLimit` é chamado antes de qualquer atribuição de profissional
+- Plano `FREE` é aplicado como padrão quando a clínica não tem assinatura cadastrada
+
+### Sequência de prompts
+
+| # | Nome                                   | O que implementa                                         |
+|---|----------------------------------------|----------------------------------------------------------|
+| 1 | `subscription-schema`                  | Schema com enum de planos e mapa de limites              |
+| 2 | `subscription-dtos`                    | DTOs de criação e atualização                            |
+| 3 | `subscriptions-service`                | Service incluindo `enforceClinicProfessionalLimit`       |
+| 4 | `subscriptions-controller`             | Controller com acesso restrito ao role `CLINIC`          |
+| 5 | `subscriptions-module-and-app`         | Module e registro no AppModule                           |
+| 6 | `clinic-professionals-limit-enforcement` | Integração do limite no `ClinicProfessionalsService`   |
+| 7 | `subscriptions-tests`                  | Testes unitários: CRUD e enforcement de limites          |
+
+---
+
+## Sprint 05 — Chat (LLM Integration) ✅
+
+**Spec:** `medicano_crew/docs/specs/sprint-05-chat.md`
+**Prompts:** `medicano_crew/docs/specs/sprint-05-prompts.json`
+
+### Escopo
+
+- Assistente de agendamento via linguagem natural integrado ao Claude API
+- Sessões de chat por usuário com histórico de mensagens persistido no MongoDB
+- Contexto de clínica opcional por sessão
+
+### Regras de negócio
+
+- Janela de contexto: últimas 20 mensagens enviadas ao LLM
+- Modelo: `claude-sonnet-4-6`, `max_tokens: 1024`
+- `ANTHROPIC_API_KEY` lida do `ConfigService` — nunca hardcoded
+- Todos os usuários autenticados podem usar o chat (sem restrição de role)
+
+### Sequência de prompts
+
+| # | Nome                    | O que implementa                                              |
+|---|-------------------------|---------------------------------------------------------------|
+| 1 | `install-anthropic-sdk` | Adiciona `@anthropic-ai/sdk` às dependências da API           |
+| 2 | `chat-schemas`          | Schemas `ChatSession` e `ChatMessage` com enum `MessageRole`  |
+| 3 | `chat-dtos`             | DTOs `CreateSessionDto` e `SendMessageDto`                    |
+| 4 | `chat-service`          | Service com histórico de conversa e integração com Claude API |
+| 5 | `chat-controller`       | Controller — todos os endpoints exigem autenticação           |
+| 6 | `chat-module-and-app`   | Module e registro no AppModule                                |
+| 7 | `chat-tests`            | Testes unitários com Anthropic client mockado                 |
+
+---
+
+## Sprint 06 — Schema Enrichment & Public Search 🚧
+
+**Spec:** `medicano_crew/docs/specs/sprint-06-enrichment.md`
+**Prompts:** `medicano_crew/docs/specs/sprint-06-prompts.json`
+
+### Escopo
+
+- Enriquecer os schemas de `Clinic` e `Professional` com endereço, contato e identificação
+- Criar enum `Specialty` usado pela plataforma
+- Adicionar endpoints públicos de busca com filtros por especialidade e cidade
+- Adicionar endpoints públicos de perfil de clínica e profissional
+
+### Entidades — campos novos
+
+**Clinic**
+
+| Campo | Tipo | Regras |
+|-------|------|--------|
+| `cnpj` | `string` | obrigatório, único, 14 dígitos |
+| `specialties` | `Specialty[]` | obrigatório, mínimo 1 item |
+| `address` | `Address` (subdocumento) | obrigatório |
+| `phone` | `string` | opcional |
+| `description` | `string` | opcional, máx 1000 caracteres |
+
+**Professional**
+
+| Campo | Tipo | Regras |
+|-------|------|--------|
+| `cpf` | `string` | obrigatório, único, 11 dígitos |
+| `registration` | `string` | obrigatório (ex: "CRM/SP 123456") |
+| `address` | `Address` (subdocumento) | obrigatório |
+| `phone` | `string` | opcional |
+| `description` | `string` | opcional, máx 1000 caracteres |
+
+**Address** (subdocumento compartilhado)
+
+| Campo | Tipo |
+|-------|------|
+| `street`, `number`, `neighborhood`, `city`, `state`, `zipCode` | obrigatórios |
+| `complement` | opcional |
+
+### Endpoints
+
+```
+GET /search                      # público — busca por specialty e/ou city
+GET /search/clinics/:id          # público — perfil de clínica
+GET /search/professionals/:id    # público — perfil de profissional
+```
+
+### Sequência de prompts
+
+| # | Nome                              | O que implementa                                              |
+|---|-----------------------------------|---------------------------------------------------------------|
+| 1 | `specialty-enum-and-address-schema` | Enum `Specialty` + subdocumento `Address` + `AddressDto`    |
+| 2 | `enrich-clinic-schema`            | Adiciona novos campos ao schema e DTOs de `Clinic`            |
+| 3 | `enrich-professional-schema`      | Adiciona novos campos ao schema e DTOs de `Professional`      |
+| 4 | `search-module`                   | Module de busca pública com filtros de specialty e city       |
+| 5 | `search-tests`                    | Testes unitários do `SearchService`                           |
+| 6 | `register-search-and-update-types` | Registra `SearchModule` no AppModule e atualiza `@medicano/types` |
 
 Para executar:
 
 ```bash
 cd medicano_crew
-python run_sprint.py
+python run_sprint.py docs/specs/sprint-06-prompts.json
 ```
