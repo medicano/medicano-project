@@ -10,6 +10,7 @@ import { ClinicProfessionalsModule } from './professionals/clinic-professionals.
 import { AppointmentsModule } from './appointments/appointments.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { ChatModule } from './chat/chat.module';
+import { SearchModule } from './search/search.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { ChatModule } from './chat/chat.module';
     AppointmentsModule,
     SubscriptionsModule,
     ChatModule,
+    SearchModule,
   ],
 })
 export class AppModule {}
