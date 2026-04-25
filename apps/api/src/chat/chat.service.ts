@@ -2,7 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
-  Inject,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -17,64 +17,46 @@ import {
   ChatMessageDocument,
 } from './schemas/chat-message.schema';
 import { CreateChatMessageDto } from './dto/create-chat-message.dto';
-import { SendMessageResponse } from './dto/send-message-response.dto';
+import {
+  SendMessageResponse,
+  RecommendationDto,
+} from './dto/send-message-response.dto';
 import { TRIAGE_SYSTEM_PROMPT } from './constants/triage-prompt';
 import { Specialty } from '../common/enums/specialty.enum';
-import { ANTHROPIC_CLIENT } from './chat.constants';
-
-const MAX_CONTEXT_MESSAGES = 20;
-
-interface ParsedRecommendation {
-  specialty: Specialty;
-  reasoning: string;
-}
 
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger(ChatService.name);
+
   constructor(
     @InjectModel(ChatSession.name)
     private readonly sessionModel: Model<ChatSessionDocument>,
     @InjectModel(ChatMessage.name)
     private readonly messageModel: Model<ChatMessageDocument>,
-    @Inject(ANTHROPIC_CLIENT)
     private readonly anthropicClient: Anthropic,
   ) {}
 
-  public async createSession(): Promise<ChatSessionDocument> {
-    const session = new this.sessionModel({});
-    return session.save();
-  }
-
-  public async findSessionById(
-    sessionId: string,
-  ): Promise<ChatSessionDocument> {
-    const session = await this.sessionModel.findById(sessionId).exec();
-    if (!session) {
-      throw new NotFoundException(`Session ${sessionId} not found`);
-    }
-    return session;
-  }
-
-  public async findMessagesBySession(
-    sessionId: string,
-  ): Promise<ChatMessageDocument[]> {
-    return this.messageModel
-      .find({ sessionId })
-      .sort({ createdAt: 1 })
-      .exec();
-  }
-
-  public async sendMessage(
+  async sendMessage(
     sessionId: string,
     dto: CreateChatMessageDto,
   ): Promise<SendMessageResponse> {
-    const session = await this.findSessionById(sessionId);
+    const session = await this.sessionModel.findById(sessionId).exec();
+    if (!session) {
+      throw new NotFoundException('Chat session not found');
+    }
 
     if (session.recommendedSpecialty) {
       throw new ConflictException(
-        'This triage session has already been completed. Start a new session for a new triage.',
+        'A specialty has already been recommended for this session',
       );
     }
+
+    const previousMessages = await this.messageModel
+      .find({ sessionId })
+      .sort({ createdAt: 1 })
+      .exec();
+
+    const isFirstMessage = previousMessages.length === 0;
 
     await this.messageModel.create({
       sessionId,
@@ -82,79 +64,85 @@ export class ChatService {
       content: dto.content,
     });
 
-    const recentMessages = await this.messageModel
-      .find({ sessionId })
-      .sort({ createdAt: -1 })
-      .limit(MAX_CONTEXT_MESSAGES)
-      .exec();
+    const llmMessages = [
+      ...previousMessages.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      })),
+      { role: 'user' as const, content: dto.content },
+    ];
 
-    const orderedMessages = recentMessages.reverse();
-
-    const contextMessages = orderedMessages.map((msg) => ({
-      role: msg.role as 'user' | 'assistant',
-      content: msg.content,
-    }));
-
-    const completion = await this.anthropicClient.messages.create({
-      model: 'claude-3-5-sonnet-latest',
+    const llmResponse = await this.anthropicClient.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 1024,
       system: TRIAGE_SYSTEM_PROMPT,
-      messages: contextMessages,
+      messages: llmMessages,
     });
 
-    const assistantText = completion.content
-      .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-      .map((block) => block.text)
-      .join('\n');
+    const assistantContent =
+      llmResponse.content
+        ?.map((block: { type: string; text?: string }) =>
+          block.type === 'text' ? block.text ?? '' : '',
+        )
+        .join('') ?? '';
 
-    const recommendation = this.parseRecommendation(assistantText);
+    const recommendation = this.parseRecommendation(assistantContent);
 
-    const assistantMessage = await this.messageModel.create({
+    const savedMessage = await this.messageModel.create({
       sessionId,
       role: 'assistant',
-      content: assistantText,
+      content: assistantContent,
     });
-
-    let sessionDirty = false;
 
     if (recommendation) {
       session.recommendedSpecialty = recommendation.specialty;
-      sessionDirty = true;
     }
 
-    if (!session.disclaimerShown) {
+    if (isFirstMessage) {
       session.disclaimerShown = true;
-      sessionDirty = true;
     }
 
-    if (sessionDirty) {
+    if (recommendation || isFirstMessage) {
       await session.save();
     }
 
     return {
-      message: assistantMessage,
-      recommendation: recommendation
-        ? {
-            specialty: recommendation.specialty,
-            reasoning: recommendation.reasoning,
-          }
-        : undefined,
+      message: savedMessage,
+      recommendation,
     };
   }
 
-  private parseRecommendation(text: string): ParsedRecommendation | null {
-    const jsonMatch = text.match(/\{[^{}]*"recommendation"[^{}]*\}/);
-    if (!jsonMatch) return null;
+  parseRecommendation(content: string): RecommendationDto | null {
+    if (!content) {
+      return null;
+    }
+
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return null;
+    }
 
     try {
-      const parsed = JSON.parse(jsonMatch[0]);
-      const specialty = parsed.recommendation as Specialty;
-      if (!Object.values(Specialty).includes(specialty)) return null;
-      return {
-        specialty,
-        reasoning: typeof parsed.reasoning === 'string' ? parsed.reasoning : '',
+      const parsed = JSON.parse(jsonMatch[0]) as {
+        recommendation?: string;
+        reasoning?: string;
       };
-    } catch {
+
+      if (!parsed.recommendation || !parsed.reasoning) {
+        return null;
+      }
+
+      const validSpecialties = Object.values(Specialty) as string[];
+      if (!validSpecialties.includes(parsed.recommendation)) {
+        return null;
+      }
+
+      return {
+        specialty: parsed.recommendation as Specialty,
+        reasoning: parsed.reasoning,
+      };
+    } catch (err) {
+      this.logger.debug(`Failed to parse recommendation JSON: ${String(err)}`);
       return null;
     }
   }
