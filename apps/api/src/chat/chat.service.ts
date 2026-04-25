@@ -1,8 +1,12 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  Inject,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
+import Anthropic from '@anthropic-ai/sdk';
 
 import {
   ChatSession,
@@ -11,109 +15,147 @@ import {
 import {
   ChatMessage,
   ChatMessageDocument,
-  MessageRole,
 } from './schemas/chat-message.schema';
-import { CreateChatSessionDto } from './dto/create-chat-session.dto';
 import { CreateChatMessageDto } from './dto/create-chat-message.dto';
+import { SendMessageResponse } from './dto/send-message-response.dto';
+import { TRIAGE_SYSTEM_PROMPT } from './constants/triage-prompt';
+import { Specialty } from '../common/enums/specialty.enum';
+import { ANTHROPIC_CLIENT } from './chat.constants';
 
 const MAX_CONTEXT_MESSAGES = 20;
-const LLM_MODEL = 'claude-sonnet-4-6';
-const MAX_RESPONSE_TOKENS = 1024;
-const SYSTEM_PROMPT =
-  'Você é um assistente de agendamento médico da plataforma Medicano. ' +
-  'Ajude os usuários a agendar, verificar e gerenciar consultas médicas de forma clara e eficiente.';
+
+interface ParsedRecommendation {
+  specialty: Specialty;
+  reasoning: string;
+}
 
 @Injectable()
 export class ChatService {
-  private readonly anthropicClient: Anthropic;
-
   constructor(
     @InjectModel(ChatSession.name)
     private readonly sessionModel: Model<ChatSessionDocument>,
     @InjectModel(ChatMessage.name)
     private readonly messageModel: Model<ChatMessageDocument>,
-    configService: ConfigService,
-  ) {
-    this.anthropicClient = new Anthropic({
-      apiKey: configService.get<string>('ANTHROPIC_API_KEY'),
-    });
+    @Inject(ANTHROPIC_CLIENT)
+    private readonly anthropicClient: Anthropic,
+  ) {}
+
+  public async createSession(): Promise<ChatSessionDocument> {
+    const session = new this.sessionModel({});
+    return session.save();
   }
 
-  async createSession(
-    dto: CreateChatSessionDto & { userId: string },
+  public async findSessionById(
+    sessionId: string,
   ): Promise<ChatSessionDocument> {
-    return this.sessionModel.create({
-      userId: new Types.ObjectId(dto.userId),
-      clinicId: dto.clinicId ? new Types.ObjectId(dto.clinicId) : undefined,
-    });
+    const session = await this.sessionModel.findById(sessionId).exec();
+    if (!session) {
+      throw new NotFoundException(`Session ${sessionId} not found`);
+    }
+    return session;
   }
 
-  async listSessions(userId: string): Promise<ChatSessionDocument[]> {
-    return this.sessionModel
-      .find({ userId: new Types.ObjectId(userId) })
-      .sort({ updatedAt: -1 });
+  public async findMessagesBySession(
+    sessionId: string,
+  ): Promise<ChatMessageDocument[]> {
+    return this.messageModel
+      .find({ sessionId })
+      .sort({ createdAt: 1 })
+      .exec();
   }
 
-  async sendMessage(
+  public async sendMessage(
     sessionId: string,
     dto: CreateChatMessageDto,
-  ): Promise<ChatMessageDocument> {
+  ): Promise<SendMessageResponse> {
     const session = await this.findSessionById(sessionId);
 
+    if (session.recommendedSpecialty) {
+      throw new ConflictException(
+        'This triage session has already been completed. Start a new session for a new triage.',
+      );
+    }
+
     await this.messageModel.create({
-      sessionId: session._id,
-      role: MessageRole.USER,
+      sessionId,
+      role: 'user',
       content: dto.content,
     });
 
-    const allMessages = await this.messageModel
-      .find({ sessionId: session._id })
-      .sort({ createdAt: 1 });
-    const history = allMessages.slice(-MAX_CONTEXT_MESSAGES);
+    const recentMessages = await this.messageModel
+      .find({ sessionId })
+      .sort({ createdAt: -1 })
+      .limit(MAX_CONTEXT_MESSAGES)
+      .exec();
 
-    const response = await this.anthropicClient.messages.create({
-      model: LLM_MODEL,
-      max_tokens: MAX_RESPONSE_TOKENS,
-      system: SYSTEM_PROMPT,
-      messages: history.map((m) => ({
-        role: m.role,
-        content: m.content,
-      })),
+    const orderedMessages = recentMessages.reverse();
+
+    const contextMessages = orderedMessages.map((msg) => ({
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content,
+    }));
+
+    const completion = await this.anthropicClient.messages.create({
+      model: 'claude-3-5-sonnet-latest',
+      max_tokens: 1024,
+      system: TRIAGE_SYSTEM_PROMPT,
+      messages: contextMessages,
     });
 
-    const assistantText =
-      response.content[0].type === 'text' ? response.content[0].text : '';
+    const assistantText = completion.content
+      .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+      .map((block) => block.text)
+      .join('\n');
+
+    const recommendation = this.parseRecommendation(assistantText);
 
     const assistantMessage = await this.messageModel.create({
-      sessionId: session._id,
-      role: MessageRole.ASSISTANT,
+      sessionId,
+      role: 'assistant',
       content: assistantText,
     });
 
-    await this.sessionModel.findByIdAndUpdate(sessionId, {
-      updatedAt: new Date(),
-    });
+    let sessionDirty = false;
 
-    return assistantMessage;
+    if (recommendation) {
+      session.recommendedSpecialty = recommendation.specialty;
+      sessionDirty = true;
+    }
+
+    if (!session.disclaimerShown) {
+      session.disclaimerShown = true;
+      sessionDirty = true;
+    }
+
+    if (sessionDirty) {
+      await session.save();
+    }
+
+    return {
+      message: assistantMessage,
+      recommendation: recommendation
+        ? {
+            specialty: recommendation.specialty,
+            reasoning: recommendation.reasoning,
+          }
+        : undefined,
+    };
   }
 
-  async listMessages(sessionId: string): Promise<ChatMessageDocument[]> {
-    const session = await this.findSessionById(sessionId);
-    return this.messageModel
-      .find({ sessionId: session._id })
-      .sort({ createdAt: 1 });
-  }
+  private parseRecommendation(text: string): ParsedRecommendation | null {
+    const jsonMatch = text.match(/\{[^{}]*"recommendation"[^{}]*\}/);
+    if (!jsonMatch) return null;
 
-  private async findSessionById(
-    sessionId: string,
-  ): Promise<ChatSessionDocument> {
-    if (!Types.ObjectId.isValid(sessionId)) {
-      throw new NotFoundException(`Invalid session ID: ${sessionId}`);
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      const specialty = parsed.recommendation as Specialty;
+      if (!Object.values(Specialty).includes(specialty)) return null;
+      return {
+        specialty,
+        reasoning: typeof parsed.reasoning === 'string' ? parsed.reasoning : '',
+      };
+    } catch {
+      return null;
     }
-    const session = await this.sessionModel.findById(sessionId);
-    if (!session) {
-      throw new NotFoundException(`Chat session ${sessionId} not found`);
-    }
-    return session;
   }
 }
