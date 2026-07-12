@@ -91,7 +91,7 @@ export const ClinicSchema = SchemaFactory.createForClass(Clinic);
 
 // One clinic per user. Guards against duplicate Clinic documents for the same
 // owner, which would split a clinic's subscription and professional links across
-// two records and make professionals vanish from patient search.
-// Run scripts/repair-duplicate-clinics.js before relying on this index.
+// two records and make professionals vanish from patient search. Existing
+// duplicates were consolidated by a one-time repair script (see git history).
 ClinicSchema.index({ userId: 1 }, { unique: true });
 

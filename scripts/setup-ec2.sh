@@ -17,7 +17,7 @@ sudo apt-get install -y nginx
 sudo apt-get install -y certbot python3-certbot-nginx
 
 # Clonar o repositório
-git clone https://github.com/SEU_USUARIO/medicano.git ~/medicano
+git clone https://github.com/medicano/medicano.git ~/medicano
 cd ~/medicano
 npm ci
 

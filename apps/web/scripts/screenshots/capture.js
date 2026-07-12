@@ -2,14 +2,33 @@ const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
 
-const BASE_URL = 'https://medicano.app';
+const BASE_URL = process.env.SCREENSHOTS_BASE_URL ?? 'https://medicano.app';
 const SCREENSHOTS_DIR = path.join(__dirname);
 const VIEWPORT = { width: 1440, height: 900 };
 
+// Credenciais vêm do ambiente — nunca hardcoded (o repositório é público)
 const CREDENTIALS = {
-  patient: { email: 'paciente@teste.com', password: 'Teste@123' },
-  clinic:  { email: 'clinica@teste.com',  password: 'Teste@123' },
+  patient: {
+    email: process.env.SCREENSHOTS_PATIENT_EMAIL,
+    password: process.env.SCREENSHOTS_PATIENT_PASSWORD,
+  },
+  clinic: {
+    email: process.env.SCREENSHOTS_CLINIC_EMAIL,
+    password: process.env.SCREENSHOTS_CLINIC_PASSWORD,
+  },
 };
+
+const missingEnvVars = [
+  'SCREENSHOTS_PATIENT_EMAIL',
+  'SCREENSHOTS_PATIENT_PASSWORD',
+  'SCREENSHOTS_CLINIC_EMAIL',
+  'SCREENSHOTS_CLINIC_PASSWORD',
+].filter((name) => !process.env[name]);
+
+if (missingEnvVars.length > 0) {
+  console.error(`Variáveis de ambiente obrigatórias não definidas: ${missingEnvVars.join(', ')}`);
+  process.exit(1);
+}
 
 // IDs resolvidos em tempo de execução
 let clinicId = null;

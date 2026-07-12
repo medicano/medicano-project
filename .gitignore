@@ -14,6 +14,12 @@ api@0.0.1
 prettier
 apps/api/coverage/
 
+# Screenshots gerados pelo script de captura (artefato, não fonte)
+apps/web/scripts/screenshots/*.png
+
+# Config PM2 local (específico de cada máquina — ver ecosystem.local.example.js)
+ecosystem.local.js
+
 # LaTeX build artifacts
 documentation/*.aux
 documentation/*.bbl
